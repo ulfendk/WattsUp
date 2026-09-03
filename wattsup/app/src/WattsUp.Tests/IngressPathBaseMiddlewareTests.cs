@@ -1,6 +1,7 @@
 using System.Net;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using WattsUp.Middleware;
 
@@ -61,7 +62,25 @@ public class IngressPathBaseMiddlewareTests
         context.Connection.RemoteIpAddress = IPAddress.Parse("172.30.32.2");
         var nextCalled = false;
 
-        var middleware = new IngressRemoteIpFilterMiddleware(_ => { nextCalled = true; return Task.CompletedTask; }, FakeEnvironment(isDevelopment: false));
+        var middleware = new IngressRemoteIpFilterMiddleware(_ => { nextCalled = true; return Task.CompletedTask; }, FakeEnvironment(isDevelopment: false), NullLogger<IngressRemoteIpFilterMiddleware>.Instance);
+        await middleware.InvokeAsync(context);
+
+        Assert.True(nextCalled);
+        Assert.Equal(200, context.Response.StatusCode);
+    }
+
+    [Fact]
+    public async Task InvokeAsync_RequestFromIngressAddressAsIPv4MappedIPv6_IsAllowedThrough()
+    {
+        // Kestrel listens dual-stack (http://+:8099) — a real IPv4 peer often arrives as an
+        // IPv4-mapped IPv6 address ("::ffff:172.30.32.2") rather than plain "172.30.32.2". This
+        // is the exact shape that slipped through untested and caused every real ingress request
+        // to be silently rejected in production.
+        var context = new DefaultHttpContext();
+        context.Connection.RemoteIpAddress = IPAddress.Parse("::ffff:172.30.32.2");
+        var nextCalled = false;
+
+        var middleware = new IngressRemoteIpFilterMiddleware(_ => { nextCalled = true; return Task.CompletedTask; }, FakeEnvironment(isDevelopment: false), NullLogger<IngressRemoteIpFilterMiddleware>.Instance);
         await middleware.InvokeAsync(context);
 
         Assert.True(nextCalled);
@@ -75,7 +94,7 @@ public class IngressPathBaseMiddlewareTests
         context.Connection.RemoteIpAddress = IPAddress.Parse("203.0.113.42");
         var nextCalled = false;
 
-        var middleware = new IngressRemoteIpFilterMiddleware(_ => { nextCalled = true; return Task.CompletedTask; }, FakeEnvironment(isDevelopment: false));
+        var middleware = new IngressRemoteIpFilterMiddleware(_ => { nextCalled = true; return Task.CompletedTask; }, FakeEnvironment(isDevelopment: false), NullLogger<IngressRemoteIpFilterMiddleware>.Instance);
         await middleware.InvokeAsync(context);
 
         Assert.False(nextCalled);
@@ -89,7 +108,7 @@ public class IngressPathBaseMiddlewareTests
         context.Connection.RemoteIpAddress = IPAddress.Loopback;
         var nextCalled = false;
 
-        var middleware = new IngressRemoteIpFilterMiddleware(_ => { nextCalled = true; return Task.CompletedTask; }, FakeEnvironment(isDevelopment: true));
+        var middleware = new IngressRemoteIpFilterMiddleware(_ => { nextCalled = true; return Task.CompletedTask; }, FakeEnvironment(isDevelopment: true), NullLogger<IngressRemoteIpFilterMiddleware>.Instance);
         await middleware.InvokeAsync(context);
 
         Assert.True(nextCalled);
@@ -102,7 +121,7 @@ public class IngressPathBaseMiddlewareTests
         context.Connection.RemoteIpAddress = IPAddress.Loopback;
         var nextCalled = false;
 
-        var middleware = new IngressRemoteIpFilterMiddleware(_ => { nextCalled = true; return Task.CompletedTask; }, FakeEnvironment(isDevelopment: false));
+        var middleware = new IngressRemoteIpFilterMiddleware(_ => { nextCalled = true; return Task.CompletedTask; }, FakeEnvironment(isDevelopment: false), NullLogger<IngressRemoteIpFilterMiddleware>.Instance);
         await middleware.InvokeAsync(context);
 
         Assert.False(nextCalled);
