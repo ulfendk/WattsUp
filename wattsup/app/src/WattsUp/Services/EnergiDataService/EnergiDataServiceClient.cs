@@ -41,24 +41,52 @@ public sealed class EnergiDataServiceClient(HttpClient httpClient, ILogger<Energ
         return envelope?.Records ?? [];
     }
 
+    // DatahubPricelist carries every historical validity-period row for every charge type for
+    // every DSO - hundreds of rows per company. A single page this size is nowhere near enough to
+    // reach most companies (confirmed live: the whole dataset is ~440k rows across 69 distinct
+    // companies, and a single unsorted 50k-row page only ever surfaced 7 of them). Page through
+    // the full dataset instead, sorted for deterministic paging, accumulating distinct pairs.
+    private const int GridCompanyPageSize = 50000;
+    private const int GridCompanyMaxPages = 20; // ~1M rows of headroom over the ~440k observed live
+    private static readonly TimeSpan GridCompanyPageDelay = TimeSpan.FromSeconds(2); // be polite to a free public API
+
     public async Task<IReadOnlyList<(string GlnNumber, string ChargeOwner)>> GetDistinctGridCompaniesAsync(CancellationToken ct = default)
     {
-        // Best-effort: pull just the two identifying columns to keep the payload small, then
-        // de-duplicate client-side. Cached by whoever calls this (Settings page), not re-fetched
-        // on every render.
-        var url = "dataset/DatahubPricelist?columns=GLN_Number,ChargeOwner&limit=50000";
-        var envelope = await GetAsync<DatahubPricelistRecord>(url, ct);
-        if (envelope is null)
+        // Pull just the two identifying columns to keep each page's payload small. Cached by
+        // whoever calls this (Settings page), not re-fetched on every render.
+        var distinct = new HashSet<(string GlnNumber, string ChargeOwner)>();
+
+        for (var page = 0; page < GridCompanyMaxPages; page++)
         {
-            return [];
+            var offset = page * GridCompanyPageSize;
+            var url = "dataset/DatahubPricelist"
+                + "?columns=GLN_Number,ChargeOwner"
+                + "&sort=GLN_Number"
+                + $"&limit={GridCompanyPageSize}&offset={offset}";
+
+            var envelope = await GetAsync<DatahubPricelistRecord>(url, ct);
+            if (envelope is null)
+            {
+                break; // request failed after retries - return whatever we've accumulated so far.
+            }
+
+            foreach (var r in envelope.Records)
+            {
+                if (!string.IsNullOrWhiteSpace(r.GlnNumber) && !string.IsNullOrWhiteSpace(r.ChargeOwner))
+                {
+                    distinct.Add((r.GlnNumber, r.ChargeOwner));
+                }
+            }
+
+            if (envelope.Records.Count < GridCompanyPageSize)
+            {
+                break; // reached the end of the dataset.
+            }
+
+            await Task.Delay(GridCompanyPageDelay, ct);
         }
 
-        return envelope.Records
-            .Where(r => !string.IsNullOrWhiteSpace(r.GlnNumber) && !string.IsNullOrWhiteSpace(r.ChargeOwner))
-            .Select(r => (r.GlnNumber, r.ChargeOwner))
-            .Distinct()
-            .OrderBy(x => x.ChargeOwner, StringComparer.OrdinalIgnoreCase)
-            .ToList();
+        return distinct.OrderBy(x => x.ChargeOwner, StringComparer.OrdinalIgnoreCase).ToList();
     }
 
     private async Task<ApiResponseEnvelope<T>?> GetAsync<T>(string relativeUrl, CancellationToken ct)

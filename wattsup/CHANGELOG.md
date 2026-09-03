@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.2 — 2026-09-03
+
+- Fix: the grid-company picker only ever fetched a single unsorted 50,000-row page from
+  DatahubPricelist, which — since each company has hundreds of historical rows — surfaced only 7
+  of the ~69 real distinct grid companies (Radius Elnet among the missing). Now pages through the
+  full dataset (sorted, ~440k rows) accumulating every distinct company.
+
 ## 0.1.1 — 2026-09-03
 
 - Fix: real ingress requests (the full `/api/hassio_ingress/<token>/...` path Supervisor actually
