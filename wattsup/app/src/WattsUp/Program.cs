@@ -87,10 +87,18 @@ if (!app.Environment.IsDevelopment())
 }
 app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
 
-// Ingress handling must run first, before static files/routing: reject non-ingress callers, then
-// rewrite PathBase from HA's per-request X-Ingress-Path header.
+// Ingress handling must run first, before routing: reject non-ingress callers, then rewrite
+// PathBase from HA's per-request X-Ingress-Path header.
 app.UseMiddleware<IngressRemoteIpFilterMiddleware>();
 app.UseMiddleware<IngressPathBaseMiddleware>();
+
+// Explicit UseRouting() is required here: without it, ASP.NET Core's minimal hosting model
+// inserts endpoint matching implicitly at the START of the pipeline (before any app.Use*()
+// middleware, including the two above), so it would always match against the raw, un-rewritten
+// request path — silently 404ing every real ingress request (which arrives with the full
+// "/api/hassio_ingress/<token>/..." prefix still in the path) while only ever matching against
+// the PathBase-stripped path in incomplete local tests that don't send a genuinely prefixed URL.
+app.UseRouting();
 
 app.UseAntiforgery();
 
