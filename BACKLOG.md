@@ -14,4 +14,7 @@ as EV charging, big laundry / dryer, etc. should be scheduled.
 
 ## 2. Add screenshots
 
-Add screenshots to the Github README and in HA presentation. The logo for this should be something with Watts going up.
+Add screenshots to the Github README and in HA presentation.
+
+~~The logo for this should be something with Watts going up.~~ Done — `wattsup/icon.png`/`logo.png`
+(source: `wattsup/logo.svg`), a lightning bolt crossed with an upward price-trend arrow.

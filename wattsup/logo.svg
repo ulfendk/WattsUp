@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="256" y2="256" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#0E4670"/>
+      <stop offset="1" stop-color="#062B44"/>
+    </linearGradient>
+    <linearGradient id="bolt" x1="90" y1="30" x2="170" y2="230" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFD54F"/>
+      <stop offset="1" stop-color="#FF9800"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="256" height="256" rx="48" fill="url(#bg)"/>
+
+  <!-- upward price trend, running behind the bolt -->
+  <path d="M40 200 L216 40" fill="none" stroke="#4FC3F7" stroke-width="14" stroke-linecap="round"/>
+  <path d="M170 40 L222 40 L222 92 Z" fill="#4FC3F7"/>
+
+  <!-- lightning bolt: watts going up -->
+  <path d="M150 22 L92 140 L124 140 L102 234 L184 104 L148 104 Z"
+        fill="url(#bolt)" stroke="#E65100" stroke-width="5" stroke-linejoin="round"/>
+</svg>
