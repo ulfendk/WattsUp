@@ -1,0 +1,74 @@
+@page "/diagnostics"
+@inject DiagnosticsStatusService DiagnosticsStatus
+@inject WattsUp.Services.Mqtt.IMqttBrokerResolver MqttBrokerResolver
+@inject WattsUp.Services.Eloverblik.IEloverblikClient EloverblikClient
+@inject AddonOptions AddonOptions
+
+<PageTitle>WattsUp — Diagnostics</PageTitle>
+
+<MudText Typo="Typo.h4" Class="mb-4">Diagnostics</MudText>
+
+<MudGrid Class="mb-4">
+    <MudItem xs="12" md="4">
+        <MudPaper Class="pa-4" Outlined="true">
+            <MudText Typo="Typo.subtitle1">Spot price poller</MudText>
+            <StalenessBadge Label="Last update" Status="@DiagnosticsStatus.SpotPricePoll" WarnAfter="TimeSpan.FromHours(2)" StaleAfter="TimeSpan.FromHours(26)" />
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="12" md="4">
+        <MudPaper Class="pa-4" Outlined="true">
+            <MudText Typo="Typo.subtitle1">Tariff poller</MudText>
+            <StalenessBadge Label="Last update" Status="@DiagnosticsStatus.TariffPoll" WarnAfter="TimeSpan.FromDays(2)" StaleAfter="TimeSpan.FromDays(3)" />
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="12" md="4">
+        <MudPaper Class="pa-4" Outlined="true">
+            <MudText Typo="Typo.subtitle1">Eloverblik consumption poller</MudText>
+            <StalenessBadge Label="Last update" Status="@DiagnosticsStatus.ConsumptionPoll" WarnAfter="TimeSpan.FromDays(2)" StaleAfter="TimeSpan.FromDays(3)" />
+        </MudPaper>
+    </MudItem>
+</MudGrid>
+
+<MudPaper Class="pa-4 mb-4" Outlined="true">
+    <MudText Typo="Typo.h6" Class="mb-2">Connections</MudText>
+    <MudSimpleTable Dense="true">
+        <tbody>
+            <tr>
+                <td>MQTT broker</td>
+                <td>@(_mqttBroker is null ? "Not connected — no manual override and no Supervisor MQTT service found" : $"{_mqttBroker.Host}:{_mqttBroker.Port} (source: {_mqttBroker.Source})")</td>
+            </tr>
+            <tr>
+                <td>Eloverblik</td>
+                <td>@(EloverblikClient.IsConfigured ? "Refresh token configured" : "Not configured — electric heating always uses the normal elafgift rate")</td>
+            </tr>
+            <tr>
+                <td>Carnot.dk API key</td>
+                <td>@(string.IsNullOrWhiteSpace(AddonOptions.CarnotApiKey) ? "Not set" : "Set (reserved, unused this version — price predictions are not implemented yet)")</td>
+            </tr>
+        </tbody>
+    </MudSimpleTable>
+</MudPaper>
+
+<MudPaper Class="pa-4" Outlined="true">
+    <MudText Typo="Typo.h6" Class="mb-2">Warnings</MudText>
+    @if (DiagnosticsStatus.Warnings.Count == 0)
+    {
+        <MudText Typo="Typo.body2">No warnings.</MudText>
+    }
+    else
+    {
+        @foreach (var warning in DiagnosticsStatus.Warnings)
+        {
+            <MudAlert Severity="Severity.Warning" Class="mb-2">@warning</MudAlert>
+        }
+    }
+</MudPaper>
+
+@code {
+    private WattsUp.Services.Mqtt.ResolvedMqttBroker? _mqttBroker;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _mqttBroker = await MqttBrokerResolver.ResolveAsync();
+    }
+}

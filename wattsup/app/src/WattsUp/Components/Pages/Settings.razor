@@ -1,0 +1,197 @@
+@page "/settings"
+@inject ISettingsService SettingsService
+@inject WattsUp.Services.EnergiDataService.IEnergiDataServiceClient EnergiDataServiceClient
+@inject WattsUp.Services.Eloverblik.IEloverblikClient EloverblikClient
+@inject IMeteringPointRepository MeteringPointRepository
+@inject ISnackbar Snackbar
+
+<PageTitle>WattsUp — Settings</PageTitle>
+
+<MudText Typo="Typo.h4" Class="mb-4">Settings</MudText>
+
+@if (_loading)
+{
+    <MudProgressCircular Indeterminate="true" />
+}
+else
+{
+    <MudPaper Class="pa-4 mb-4" Outlined="true">
+        <MudText Typo="Typo.h6" Class="mb-2">Price areas</MudText>
+        <MudSelect T="string" Label="Tracked price areas" MultiSelection="true" @bind-SelectedValues="_selectedPriceAreas">
+            <MudSelectItem T="string" Value="@("DK1")">DK1</MudSelectItem>
+            <MudSelectItem T="string" Value="@("DK2")">DK2</MudSelectItem>
+        </MudSelect>
+    </MudPaper>
+
+    <MudPaper Class="pa-4 mb-4" Outlined="true">
+        <MudText Typo="Typo.h6" Class="mb-2">Grid company</MudText>
+        <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-2">
+            <MudButton Variant="Variant.Outlined" OnClick="LoadGridCompaniesAsync" Disabled="@_loadingGridCompanies">
+                @(_gridCompanies.Count == 0 ? "Load grid companies" : "Refresh list")
+            </MudButton>
+            @if (_loadingGridCompanies)
+            {
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" />
+            }
+        </MudStack>
+        <MudSelect T="string" Label="Grid company" @bind-Value="_gridCompanyGln" ToStringFunc="@GlnToDisplayName">
+            @foreach (var company in _gridCompanies)
+            {
+                <MudSelectItem T="string" Value="@company.GlnNumber">@company.ChargeOwner</MudSelectItem>
+            }
+        </MudSelect>
+    </MudPaper>
+
+    <MudPaper Class="pa-4 mb-4" Outlined="true">
+        <MudText Typo="Typo.h6" Class="mb-2">Electric heating &amp; VAT</MudText>
+        <MudSwitch T="bool" @bind-Value="_electricHeatingRegistered" Label="Property registered for electric heating (reduced elafgift above 4000 kWh/year)" Color="Color.Primary" />
+        <MudSwitch T="bool" @bind-Value="_vatEnabled" Label="Include 25% VAT in the published price" Color="Color.Primary" />
+        <MudNumericField T="decimal" Label="Reduced elafgift rate (DKK/kWh, fallback)" @bind-Value="_reducedElafgiftRate" Format="0.###" Min="0" />
+    </MudPaper>
+
+    <MudPaper Class="pa-4 mb-4" Outlined="true">
+        <MudText Typo="Typo.h6" Class="mb-2">Supplier</MudText>
+        <MudNumericField T="decimal" Label="Markup (øre/kWh)" @bind-Value="_supplierMarkupOre" Format="0.##" Min="0" />
+        <MudNumericField T="decimal" Label="Monthly subscription fee (DKK, informational only)" @bind-Value="_supplierSubscriptionFee" Format="0.##" Min="0" />
+    </MudPaper>
+
+    <MudPaper Class="pa-4 mb-4" Outlined="true">
+        <MudText Typo="Typo.h6" Class="mb-2">Eloverblik metering point</MudText>
+        @if (!EloverblikClient.IsConfigured)
+        {
+            <MudAlert Severity="Severity.Info">
+                No Eloverblik refresh token configured. Set one under the add-on's own Configuration tab in Home Assistant
+                (a restart is required for secrets) — until then, electric heating always uses the normal elafgift rate.
+            </MudAlert>
+        }
+        else
+        {
+            <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-2">
+                <MudButton Variant="Variant.Outlined" OnClick="LoadMeteringPointsAsync" Disabled="@_loadingMeteringPoints">
+                    @(_meteringPoints.Count == 0 ? "Load metering points" : "Refresh list")
+                </MudButton>
+                @if (_loadingMeteringPoints)
+                {
+                    <MudProgressCircular Size="Size.Small" Indeterminate="true" />
+                }
+            </MudStack>
+            <MudSelect T="string" Label="Tracked metering point" @bind-Value="_selectedMeteringPointGsrn">
+                @foreach (var mp in _meteringPoints)
+                {
+                    <MudSelectItem T="string" Value="@mp.Gsrn">@mp.Gsrn @(mp.Address is null ? "" : $"— {mp.Address}")</MudSelectItem>
+                }
+            </MudSelect>
+        }
+    </MudPaper>
+
+    <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SaveAsync" Disabled="@_saving">Save</MudButton>
+}
+
+@code {
+    private bool _loading = true;
+    private bool _saving;
+    private bool _loadingGridCompanies;
+    private bool _loadingMeteringPoints;
+
+    private IReadOnlyCollection<string> _selectedPriceAreas = [];
+    private string? _gridCompanyGln;
+    private bool _electricHeatingRegistered;
+    private bool _vatEnabled = true;
+    private decimal _reducedElafgiftRate;
+    private decimal _supplierMarkupOre;
+    private decimal _supplierSubscriptionFee;
+    private string? _selectedMeteringPointGsrn;
+
+    private List<(string GlnNumber, string ChargeOwner)> _gridCompanies = [];
+    private List<MeteringPoint> _meteringPoints = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        var settings = await SettingsService.GetAsync();
+        _selectedPriceAreas = settings.PriceAreas.ToList();
+        _gridCompanyGln = settings.GridCompanyGln;
+        _electricHeatingRegistered = settings.ElectricHeatingRegistered;
+        _vatEnabled = settings.VatEnabled;
+        _reducedElafgiftRate = settings.ReducedElafgiftRateDkkPerKwh;
+        _supplierMarkupOre = settings.SupplierMarkupOrePerKwh;
+        _supplierSubscriptionFee = settings.SupplierSubscriptionFeeDkkPerMonth;
+        _selectedMeteringPointGsrn = settings.SelectedMeteringPointGsrn;
+
+        if (!string.IsNullOrWhiteSpace(settings.GridCompanyGln) && !string.IsNullOrWhiteSpace(settings.GridCompanyName))
+        {
+            _gridCompanies.Add((settings.GridCompanyGln, settings.GridCompanyName));
+        }
+
+        _meteringPoints = (await MeteringPointRepository.GetAllAsync()).ToList();
+
+        _loading = false;
+    }
+
+    private async Task LoadGridCompaniesAsync()
+    {
+        _loadingGridCompanies = true;
+        try
+        {
+            var companies = await EnergiDataServiceClient.GetDistinctGridCompaniesAsync();
+            _gridCompanies = companies.ToList();
+        }
+        finally
+        {
+            _loadingGridCompanies = false;
+        }
+    }
+
+    private async Task LoadMeteringPointsAsync()
+    {
+        _loadingMeteringPoints = true;
+        try
+        {
+            var points = await EloverblikClient.GetMeteringPointsAsync();
+            await MeteringPointRepository.UpsertManyAsync(
+                points.Select(p => new MeteringPoint(p.Gsrn, p.TypeOfMp, p.Address, false)));
+            _meteringPoints = (await MeteringPointRepository.GetAllAsync()).ToList();
+        }
+        finally
+        {
+            _loadingMeteringPoints = false;
+        }
+    }
+
+    private string GlnToDisplayName(string? gln) =>
+        _gridCompanies.FirstOrDefault(c => c.GlnNumber == gln).ChargeOwner ?? gln ?? "";
+
+    private async Task SaveAsync()
+    {
+        _saving = true;
+        try
+        {
+            var gridCompanyName = _gridCompanies.FirstOrDefault(c => c.GlnNumber == _gridCompanyGln).ChargeOwner;
+
+            var settings = new AppSettings
+            {
+                PriceAreas = _selectedPriceAreas.ToList(),
+                GridCompanyGln = _gridCompanyGln,
+                GridCompanyName = gridCompanyName,
+                ElectricHeatingRegistered = _electricHeatingRegistered,
+                VatEnabled = _vatEnabled,
+                SupplierMarkupOrePerKwh = _supplierMarkupOre,
+                SupplierSubscriptionFeeDkkPerMonth = _supplierSubscriptionFee,
+                ReducedElafgiftRateDkkPerKwh = _reducedElafgiftRate,
+                SelectedMeteringPointGsrn = _selectedMeteringPointGsrn,
+            };
+
+            await SettingsService.SaveAsync(settings);
+
+            if (!string.IsNullOrWhiteSpace(_selectedMeteringPointGsrn))
+            {
+                await MeteringPointRepository.SetSelectedAsync(_selectedMeteringPointGsrn);
+            }
+
+            Snackbar.Add("Settings saved.", Severity.Success);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+}

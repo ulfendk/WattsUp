@@ -1,0 +1,33 @@
+configuration:
+  eloverblik_refresh_token:
+    name: Eloverblik refresh token
+    description: >-
+      Long-lived refresh token generated at eloverblik.dk (Data access → Create token). Used to
+      list your metering points and pull daily consumption for the electric-heating annual
+      threshold calculation. Leave empty to disable the Eloverblik integration — electric heating
+      will then always use the normal elafgift rate. Changing this requires an add-on restart.
+  carnot_api_key:
+    name: Carnot.dk API key (reserved, unused)
+    description: >-
+      Reserved for a future price-prediction integration with Carnot.dk. Captured but not used by
+      this version — safe to leave empty.
+  mqtt_host:
+    name: MQTT host (manual override)
+    description: >-
+      Leave empty to auto-discover the MQTT broker via the Home Assistant Supervisor (works with
+      the official Mosquitto broker add-on). Set this to override, e.g. to point at an external
+      broker.
+  mqtt_port:
+    name: MQTT port
+    description: Only used when mqtt_host is set.
+  mqtt_username:
+    name: MQTT username
+    description: Only used when mqtt_host is set.
+  mqtt_password:
+    name: MQTT password
+    description: Only used when mqtt_host is set.
+  log_level:
+    name: Log level
+    description: Verbosity of the add-on's own logs.
+network:
+  8099/tcp: Web UI (also reachable via the Home Assistant sidebar through ingress)

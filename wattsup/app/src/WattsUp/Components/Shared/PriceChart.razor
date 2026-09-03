@@ -1,0 +1,24 @@
+<MudChart T="double" ChartType="ChartType.Line" ChartSeries="@_series" ChartLabels="@_labels"
+          ChartOptions="@_options" Width="100%" Height="300px" />
+
+@code {
+    [Parameter, EditorRequired]
+    public IReadOnlyList<(DateTimeOffset AtLocal, decimal TotalDkkPerKwh)> Points { get; set; } = [];
+
+    private List<ChartSeries<double>> _series = [];
+    private string[] _labels = [];
+    private readonly ChartOptions _options = new() { ShowLegend = false };
+
+    protected override void OnParametersSet()
+    {
+        _labels = Points.Select(p => p.AtLocal.ToString("HH:mm")).ToArray();
+        _series =
+        [
+            new ChartSeries<double>
+            {
+                Name = "DKK/kWh",
+                Data = Points.Select(p => (double)p.TotalDkkPerKwh).ToArray(),
+            },
+        ];
+    }
+}

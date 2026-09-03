@@ -427,3 +427,8 @@ FodyWeavers.xsd
 *.msix
 *.msm
 *.msp
+
+# WattsUp local dev SQLite database (mirrors /data/wattsup.db in the add-on container)
+wattsup.db
+wattsup.db-shm
+wattsup.db-wal

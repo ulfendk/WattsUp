@@ -1,0 +1,6 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/WattsUp.Tests/WattsUp.Tests.csproj" />
+    <Project Path="src/WattsUp/WattsUp.csproj" />
+  </Folder>
+</Solution>

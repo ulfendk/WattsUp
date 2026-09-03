@@ -1,0 +1,45 @@
+<MudTooltip Text="@TooltipText">
+    <MudChip T="string" Color="@ChipColor" Size="Size.Small" Icon="@ChipIcon">@Label: @AgeText</MudChip>
+</MudTooltip>
+
+@code {
+    [Parameter, EditorRequired]
+    public string Label { get; set; } = "";
+
+    [Parameter, EditorRequired]
+    public PollStatus Status { get; set; } = new(null, null, null);
+
+    /// <summary>Age at which the badge turns from "fresh" (green) to "aging" (amber).</summary>
+    [Parameter]
+    public TimeSpan WarnAfter { get; set; } = TimeSpan.FromHours(2);
+
+    /// <summary>Age at which the badge turns "stale" (red).</summary>
+    [Parameter]
+    public TimeSpan StaleAfter { get; set; } = TimeSpan.FromHours(26);
+
+    private TimeSpan? Age => Status.LastSuccessUtc is { } t ? DateTimeOffset.UtcNow - t : null;
+
+    private string AgeText => Age switch
+    {
+        null => "never",
+        { TotalMinutes: < 1 } => "just now",
+        { TotalHours: < 1 } a => $"{(int)a.TotalMinutes}m ago",
+        { TotalDays: < 1 } a => $"{(int)a.TotalHours}h ago",
+        var a => $"{(int)a!.Value.TotalDays}d ago",
+    };
+
+    private Color ChipColor => Age switch
+    {
+        null => Color.Error,
+        var a when a >= StaleAfter => Color.Error,
+        var a when a >= WarnAfter => Color.Warning,
+        _ => Color.Success,
+    };
+
+    private string ChipIcon => Status.LastError is not null ? Icons.Material.Filled.WarningAmber : Icons.Material.Filled.CheckCircleOutline;
+
+    private string TooltipText =>
+        Status.LastError is not null
+            ? $"Last successful update: {AgeText}. Last error: {Status.LastError}"
+            : $"Last successful update: {AgeText}";
+}

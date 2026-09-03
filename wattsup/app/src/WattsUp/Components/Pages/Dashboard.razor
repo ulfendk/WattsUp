@@ -1,0 +1,119 @@
+@page "/"
+@implements IDisposable
+@inject ISettingsService SettingsService
+@inject IPriceCalculationService PriceCalculationService
+@inject ISpotPriceRepository SpotPriceRepository
+@inject DiagnosticsStatusService DiagnosticsStatus
+
+<PageTitle>WattsUp — Dashboard</PageTitle>
+
+<MudText Typo="Typo.h4" Class="mb-4">Dashboard</MudText>
+
+@if (_loading)
+{
+    <MudProgressCircular Indeterminate="true" />
+}
+else if (_priceAreas.Count == 0)
+{
+    <MudAlert Severity="Severity.Info">
+        No price areas are tracked yet. Head to <MudLink Href="settings">Settings</MudLink> to pick DK1 and/or DK2.
+    </MudAlert>
+}
+else
+{
+    <MudStack Row="true" Class="mb-4" Wrap="Wrap.Wrap" Spacing="2">
+        <StalenessBadge Label="Spot prices" Status="@DiagnosticsStatus.SpotPricePoll" WarnAfter="TimeSpan.FromHours(2)" StaleAfter="TimeSpan.FromHours(26)" />
+        <StalenessBadge Label="Tariffs" Status="@DiagnosticsStatus.TariffPoll" WarnAfter="TimeSpan.FromDays(2)" StaleAfter="TimeSpan.FromDays(3)" />
+    </MudStack>
+
+    <MudGrid>
+        @foreach (var area in _priceAreas)
+        {
+            <MudItem xs="12" sm="6" md="4">
+                @if (_breakdowns.TryGetValue(area, out var breakdown))
+                {
+                    <PriceBreakdownCard PriceArea="@area" Breakdown="@breakdown" />
+                }
+            </MudItem>
+        }
+    </MudGrid>
+
+    <MudText Typo="Typo.h5" Class="mt-6 mb-2">Today &amp; tomorrow</MudText>
+    <MudTabs Elevation="0" Rounded="true">
+        @foreach (var area in _priceAreas)
+        {
+            <MudTabPanel Text="@area.ToUpperInvariant()">
+                @if (_chartPoints.TryGetValue(area, out var points) && points.Count > 0)
+                {
+                    <PriceChart Points="@points" />
+                }
+                else
+                {
+                    <MudAlert Severity="Severity.Info" Class="mt-2">No price data cached yet for @area — the poller runs on startup and hourly.</MudAlert>
+                }
+            </MudTabPanel>
+        }
+    </MudTabs>
+}
+
+@code {
+    private bool _loading = true;
+    private List<string> _priceAreas = [];
+    private readonly Dictionary<string, PriceBreakdown> _breakdowns = [];
+    private readonly Dictionary<string, List<(DateTimeOffset, decimal)>> _chartPoints = [];
+    private Timer? _refreshTimer;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await RefreshAsync();
+        _loading = false;
+
+        // Keep the dashboard live without requiring a manual refresh.
+        _refreshTimer = new Timer(async _ => await InvokeAsync(async () =>
+        {
+            await RefreshAsync();
+            StateHasChanged();
+        }), null, TimeSpan.FromMinutes(1), TimeSpan.FromMinutes(1));
+
+        SettingsService.SettingsChanged += OnSettingsChanged;
+    }
+
+    private async Task RefreshAsync()
+    {
+        var settings = await SettingsService.GetAsync();
+        _priceAreas = settings.PriceAreas.ToList();
+
+        var nowUtc = DateTimeOffset.UtcNow;
+        foreach (var area in _priceAreas)
+        {
+            _breakdowns[area] = await PriceCalculationService.CalculateAsync(area, nowUtc);
+
+            var localNow = TimeZoneInfo.ConvertTime(nowUtc, WattsUp.Services.Tariffs.TariffResolutionService.CopenhagenTimeZone);
+            var localMidnight = new DateTimeOffset(localNow.Date, localNow.Offset);
+            var fromUtc = localMidnight.ToUniversalTime();
+            var toUtc = fromUtc.AddDays(2);
+
+            var spotPrices = await SpotPriceRepository.GetRangeAsync(area, fromUtc, toUtc);
+            var points = new List<(DateTimeOffset, decimal)>();
+            foreach (var spot in spotPrices)
+            {
+                var breakdown = await PriceCalculationService.CalculateAsync(area, spot.TimeUtc);
+                var local = TimeZoneInfo.ConvertTime(spot.TimeUtc, WattsUp.Services.Tariffs.TariffResolutionService.CopenhagenTimeZone);
+                points.Add((local, breakdown.TotalDkkPerKwh));
+            }
+            _chartPoints[area] = points;
+        }
+    }
+
+    private void OnSettingsChanged() => InvokeAsync(async () =>
+    {
+        await RefreshAsync();
+        StateHasChanged();
+    });
+
+    public void Dispose()
+    {
+        _refreshTimer?.Dispose();
+        SettingsService.SettingsChanged -= OnSettingsChanged;
+    }
+}

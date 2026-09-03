@@ -1,0 +1,49 @@
+<MudCard Outlined="true">
+    <MudCardHeader>
+        <CardHeaderContent>
+            <MudText Typo="Typo.h6">@PriceArea.ToUpperInvariant()</MudText>
+            <MudText Typo="Typo.caption">Current actual price</MudText>
+        </CardHeaderContent>
+        <CardHeaderActions>
+            @if (!Breakdown.FullyResolved)
+            {
+                <MudTooltip Text="One or more inputs used a fallback value instead of live data — see Diagnostics.">
+                    <MudIcon Icon="@Icons.Material.Filled.WarningAmber" Color="Color.Warning" />
+                </MudTooltip>
+            }
+        </CardHeaderActions>
+    </MudCardHeader>
+    <MudCardContent>
+        <MudText Typo="Typo.h3" Class="mb-2">@Breakdown.TotalDkkPerKwh.ToString("0.###") <MudText Typo="Typo.subtitle1" Class="d-inline">DKK/kWh</MudText></MudText>
+
+        <MudSimpleTable Dense="true" Hover="false" Elevation="0">
+            <tbody>
+                <tr><td>Spot price</td><td class="text-right">@Breakdown.SpotPriceDkkPerKwh.ToString("0.###")</td></tr>
+                <tr><td>Grid tariff</td><td class="text-right">@Breakdown.GridTariffDkkPerKwh.ToString("0.###")</td></tr>
+                <tr><td>System tariff</td><td class="text-right">@Breakdown.SystemTariffDkkPerKwh.ToString("0.###")</td></tr>
+                <tr><td>Transmission tariff</td><td class="text-right">@Breakdown.TransmissionTariffDkkPerKwh.ToString("0.###")</td></tr>
+                <tr>
+                    <td>Elafgift @(Breakdown.ElafgiftReducedApplied ? "(reduced)" : "(normal)")</td>
+                    <td class="text-right">@Breakdown.ElafgiftDkkPerKwh.ToString("0.###")</td>
+                </tr>
+                <tr><td>Supplier markup</td><td class="text-right">@Breakdown.MarkupDkkPerKwh.ToString("0.###")</td></tr>
+                <tr class="mud-theme-primary">
+                    <td><strong>Subtotal</strong></td>
+                    <td class="text-right"><strong>@Breakdown.SubtotalDkkPerKwh.ToString("0.###")</strong></td>
+                </tr>
+                @if (Breakdown.VatEnabled)
+                {
+                    <tr><td>VAT (25%)</td><td class="text-right">included</td></tr>
+                }
+            </tbody>
+        </MudSimpleTable>
+    </MudCardContent>
+</MudCard>
+
+@code {
+    [Parameter, EditorRequired]
+    public string PriceArea { get; set; } = "";
+
+    [Parameter, EditorRequired]
+    public PriceBreakdown Breakdown { get; set; } = null!;
+}
