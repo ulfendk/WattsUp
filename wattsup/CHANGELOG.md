@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.1.1 — 2026-09-03
+
+- Fix: real ingress requests (the full `/api/hassio_ingress/<token>/...` path Supervisor actually
+  sends) 404'd entirely — `Program.cs` never called `UseRouting()` explicitly, so endpoint
+  matching ran before the ingress PathBase rewrite and always matched against the raw path.
+- Fix: the MudBlazor stylesheet was linked at the wrong asset path, so component styling never
+  loaded.
+- Fix: the ingress remote-IP allowlist compared against a plain IPv4 address, but Kestrel's
+  dual-stack listener presents real peers as IPv4-mapped IPv6 — every ingress request was
+  silently rejected. Normalized before comparing, and rejections are now logged.
+- MQTT moved off the legacy `MQTTnet.Extensions.ManagedClient` (no 5.x-compatible release exists)
+  onto plain MQTTnet 5.x with a self-managed reconnect loop, and now honors the Supervisor-
+  reported broker's TLS flag.
+- Repository restructured to match a standard HA add-on repository layout (`repository.yaml`, the
+  add-on under `wattsup/`, a devcontainer, and CI that publishes multi-arch images on release
+  tags) instead of living at the repo root.
+- Added `icon.png`/`logo.png`.
+
 ## 0.1.0 — 2026-09-03
 
 First iteration.
