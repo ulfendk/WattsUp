@@ -45,10 +45,8 @@ schema:
   mqtt_password: "password?"
   log_level: "list(trace|debug|info|warning|error)?"
 
-# No "image:" here on purpose: once set, Supervisor always tries to PULL that tag and does NOT
-# fall back to a local build if the pull fails. Leaving it unset makes Supervisor build straight
-# from the Dockerfile below, which is what you want both for local development and until you've
-# actually published a matching image. Once ready to publish: push a "vX.Y.Z" git tag matching
-# `version` above (triggers .github/workflows/build.yml), make the resulting GHCR package public,
-# THEN add back:
-#   image: ghcr.io/ulfendk/wattsup/wattsup
+# Once "image:" is set, Supervisor always tries to PULL that tag and does NOT fall back to a
+# local build if the pull fails — fine now that a matching multi-arch v0.2.0 image is published
+# and the GHCR package is public, but if you're iterating locally on the Dockerfile itself, comment
+# this out again so Supervisor builds from source instead (see wattsup/DOCS.md / README.md).
+image: ghcr.io/ulfendk/wattsup/wattsup
