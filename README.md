@@ -8,7 +8,13 @@ everything else.
 
 See [`wattsup/DOCS.md`](wattsup/DOCS.md) for installation and usage,
 [`wattsup/CHANGELOG.md`](wattsup/CHANGELOG.md) for release notes, and [`BACKLOG.md`](BACKLOG.md)
-for planned future work (price predictions, screenshots).
+for planned future work (a local price-prediction engine).
+
+## Screenshots
+
+| Dashboard | Dashboard (dark) | Settings |
+|---|---|---|
+| ![Dashboard](wattsup/screenshots/dashboard-light.png) | ![Dashboard, dark mode](wattsup/screenshots/dashboard-dark.png) | ![Settings](wattsup/screenshots/settings-dark.png) |
 
 ## Repository layout
 

@@ -20,6 +20,9 @@ public static class MqttDiscoveryPayloadBuilder
     public static string DiagnosticsAttributesTopic => "wattsup/diagnostics/attributes";
     public static string DiagnosticsDiscoveryTopic => "homeassistant/sensor/wattsup_diagnostics/config";
 
+    public static string CheapestPeriodStateTopic(int hours) => $"wattsup/cheapest_period/{hours}h/state";
+    public static string CheapestPeriodDiscoveryTopic(int hours) => $"homeassistant/sensor/wattsup_cheapest_start_{hours}h/config";
+
     private static Device DeviceInfo => new(["wattsup"], "WattsUp", "WattsUp");
 
     public static string BuildPriceDiscoveryPayload(string priceArea)
@@ -35,6 +38,21 @@ public static class MqttDiscoveryPayloadBuilder
             DeviceClass = "monetary",
             StateClass = "measurement",
             Icon = "mdi:transmission-tower",
+            Device = DeviceInfo,
+        };
+        return JsonSerializer.Serialize(config, JsonOptions);
+    }
+
+    public static string BuildCheapestPeriodDiscoveryPayload(int hours)
+    {
+        var config = new SensorDiscoveryConfig
+        {
+            Name = $"WattsUp Cheapest Start {hours}h",
+            UniqueId = $"wattsup_cheapest_start_{hours}h",
+            StateTopic = CheapestPeriodStateTopic(hours),
+            AvailabilityTopic = AvailabilityTopic,
+            DeviceClass = "timestamp",
+            Icon = "mdi:clock-start-outline",
             Device = DeviceInfo,
         };
         return JsonSerializer.Serialize(config, JsonOptions);

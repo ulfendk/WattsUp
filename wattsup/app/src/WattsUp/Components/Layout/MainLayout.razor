@@ -1,6 +1,13 @@
 @inherits LayoutComponentBase
+@using System.Security.Cryptography
+@using Microsoft.AspNetCore.Components.Server.ProtectedBrowserStorage
+@using MudBlazor.Services
+@implements IAsyncDisposable
+@inject IBrowserViewportService BrowserViewportService
+@inject IJSRuntime JsRuntime
+@inject ProtectedLocalStorage ProtectedLocalStorage
 
-<MudThemeProvider IsDarkMode="_isDarkMode" Theme="_theme" />
+<MudThemeProvider Theme="_theme" @bind-IsDarkMode="_isDarkMode" />
 <MudPopoverProvider />
 <MudSnackbarProvider />
 
@@ -11,9 +18,10 @@
         <MudText Typo="Typo.h6">WattsUp</MudText>
         <MudSpacer />
         <MudIconButton Icon="@(_isDarkMode ? Icons.Material.Filled.LightMode : Icons.Material.Filled.DarkMode)"
-                        Color="Color.Inherit" OnClick="@(() => _isDarkMode = !_isDarkMode)" />
+                        Color="Color.Inherit" OnClick="@ToggleDarkModeAsync" />
     </MudAppBar>
-    <MudDrawer @bind-Open="_drawerOpen" Elevation="1" Variant="@DrawerVariant.Responsive">
+    <MudDrawer @bind-Open="_drawerOpen" ClipMode="DrawerClipMode.Always" Elevation="1"
+               Variant="@DrawerVariant.Responsive" Breakpoint="Breakpoint.Md">
         <NavMenu />
     </MudDrawer>
     <MudMainContent>
@@ -24,22 +32,91 @@
 </MudLayout>
 
 @code {
-    private bool _drawerOpen = true;
-    private bool _isDarkMode = true;
-
+    // Loosely echoes Home Assistant's own Material palette (its default primary blue) so the app
+    // doesn't feel like a foreign tool bolted onto an HA dashboard — matches the sibling
+    // "timetracker" repo's basic colours (backlog item 8), not MudBlazor's default purple.
     private readonly MudTheme _theme = new()
     {
-        PaletteDark = new PaletteDark
-        {
-            Primary = "#ffb300",
-            Secondary = "#4fc3f7",
-        },
         PaletteLight = new PaletteLight
         {
-            Primary = "#ff9800",
-            Secondary = "#0288d1",
+            Primary = "#03A9F4",
+            AppbarBackground = "#03A9F4",
+            // MudBlazor's default Secondary is a bright pink - overridden here to a plain gray,
+            // since we only use Color.Secondary for muted helper text, never as an accent.
+            Secondary = "#616161",
+        },
+        PaletteDark = new PaletteDark
+        {
+            Primary = "#03A9F4",
+            Secondary = "#9E9E9E",
         },
     };
 
+    // Full drawer, always open, on desktop (Md and up); a fully-hidden off-canvas overlay toggled
+    // by the burger button below that ("Responsive" = Persistent above the breakpoint, Temporary
+    // below it). MudDrawer's own Breakpoint parameter only affects how it BEHAVES (persistent vs.
+    // overlay), not its initial Open state - without this subscription it stays fully expanded
+    // (and thus covering the page) on first load on a phone, so the actual open/closed default has
+    // to be driven from the real viewport size explicitly.
+    private bool _drawerOpen = true;
+    private readonly Guid _viewportSubscriptionId = Guid.NewGuid();
+
+    // Dark mode: an explicit user choice (via the app-bar toggle) is persisted in
+    // ProtectedLocalStorage and always wins; absent that, we follow the browser's own
+    // prefers-color-scheme on first render. ProtectedLocalStorage relies on the app's Data
+    // Protection keys, which are persisted under /data (see Program.cs), so the choice survives
+    // container restarts/upgrades too.
+    private const string DarkModeStorageKey = "wattsup.darkMode";
+    private bool _isDarkMode;
+
+    protected override async Task OnInitializedAsync() =>
+        await BrowserViewportService.SubscribeAsync(_viewportSubscriptionId, OnResizedAsync, new ResizeOptions(), fireImmediately: true);
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+        {
+            return;
+        }
+
+        _isDarkMode = await TryGetStoredDarkModeAsync() ?? await JsRuntime.InvokeAsync<bool>("themeInterop.prefersDark");
+        StateHasChanged();
+    }
+
+    private async Task ToggleDarkModeAsync()
+    {
+        _isDarkMode = !_isDarkMode;
+        await ProtectedLocalStorage.SetAsync(DarkModeStorageKey, _isDarkMode);
+    }
+
+    // ProtectedLocalStorage decrypts with the app's current Data Protection key ring - a value
+    // written by an earlier key (e.g. the ring was regenerated, or /data was wiped) throws
+    // CryptographicException instead of just "not found", which otherwise crashes the whole
+    // circuit here (this runs from OnAfterRenderAsync, with no surrounding error boundary).
+    // Falling back to the system preference is a much better failure mode than a dead page.
+    private async Task<bool?> TryGetStoredDarkModeAsync()
+    {
+        try
+        {
+            var stored = await ProtectedLocalStorage.GetAsync<bool>(DarkModeStorageKey);
+            return stored.Success ? stored.Value : null;
+        }
+        catch (CryptographicException)
+        {
+            return null;
+        }
+    }
+
+    private async Task OnResizedAsync(BrowserViewportEventArgs args)
+    {
+        // Note the argument order: (rangeToTestAgainst, actualCurrentBreakpoint) - passing these
+        // the other way round silently answers a different question and always returns false for
+        // anything at or above Md.
+        _drawerOpen = await BrowserViewportService.IsBreakpointWithinReferenceSizeAsync(Breakpoint.MdAndUp, args.Breakpoint);
+        await InvokeAsync(StateHasChanged);
+    }
+
     private void ToggleDrawer() => _drawerOpen = !_drawerOpen;
+
+    public async ValueTask DisposeAsync() => await BrowserViewportService.UnsubscribeAsync(_viewportSubscriptionId);
 }

@@ -11,6 +11,7 @@ public class TariffResolutionServiceTests
     private readonly Mock<INationwideChargeSeedRepository> _seedRepository = new();
     private readonly Mock<ISettingsRepository> _settingsRepository = new();
     private readonly Mock<IConsumptionRepository> _consumptionRepository = new();
+    private readonly Mock<IElafgiftAllowanceRepository> _elafgiftAllowanceRepository = new();
 
     private static readonly IReadOnlyList<NationwideChargeSeed> Seeds =
     [
@@ -20,7 +21,8 @@ public class TariffResolutionServiceTests
     ];
 
     private TariffResolutionService CreateSut() => new(
-        _tariffRepository.Object, _seedRepository.Object, _settingsRepository.Object, _consumptionRepository.Object);
+        _tariffRepository.Object, _seedRepository.Object, _settingsRepository.Object, _consumptionRepository.Object,
+        _elafgiftAllowanceRepository.Object);
 
     private static TariffLineItem FlatRow(string gln, string code, decimal rate) => new()
     {
@@ -146,5 +148,80 @@ public class TariffResolutionServiceTests
 
         Assert.False(result.ElafgiftReducedApplied);
         Assert.Equal(NationwideCharges.NormalElafgiftDkkPerKwh, result.ElafgiftDkkPerKwh);
+    }
+
+    [Fact]
+    public async Task ResolveAsync_CompletedDayWithRecordedAllowance_BlendsRateFromRealAllowanceData()
+    {
+        var pastDate = DateOnly.FromDateTime(DateTime.UtcNow).AddDays(-5);
+        var settings = new AppSettings
+        {
+            ElectricHeatingRegistered = true,
+            SelectedMeteringPointGsrn = "571234567890123456",
+            ReducedElafgiftRateDkkPerKwh = 0.004m,
+        };
+        _settingsRepository.Setup(r => r.GetAsync(It.IsAny<CancellationToken>())).ReturnsAsync(settings);
+        _seedRepository.Setup(r => r.GetAllAsync(It.IsAny<CancellationToken>())).ReturnsAsync(Seeds);
+        _tariffRepository
+            .Setup(r => r.GetByChargeTypeCodeAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<DateOnly>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(FlatRow(NationwideCharges.SystemOperatorGln, NationwideCharges.ElafgiftChargeTypeCode, NationwideCharges.NormalElafgiftDkkPerKwh));
+        _tariffRepository
+            .Setup(r => r.GetAllRowsAsync(NationwideCharges.SystemOperatorGln, It.IsAny<DateOnly>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([]);
+        _consumptionRepository
+            .Setup(r => r.GetDailyKwhAsync("571234567890123456", pastDate, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(10m);
+        _elafgiftAllowanceRepository
+            .Setup(r => r.GetAsync("571234567890123456", pastDate, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ElafgiftDailyAllowance("571234567890123456", pastDate, 5m, "eloverblik_secondary_mp"));
+
+        var sut = CreateSut();
+        // Local midnight UTC-equivalent for pastDate, well within the day regardless of DST.
+        var atUtc = new DateTimeOffset(pastDate.Year, pastDate.Month, pastDate.Day, 10, 0, 0, TimeSpan.Zero);
+        var result = await sut.ResolveAsync(atUtc);
+
+        // 5 kWh at normal (0.008) + 5 kWh at reduced (0.004) over 10 kWh total -> blended 0.006.
+        Assert.Equal(0.006m, result.ElafgiftDkkPerKwh);
+        Assert.True(result.ElafgiftReducedApplied);
+    }
+
+    [Fact]
+    public async Task ResolveAsync_CompletedDayWithoutRecordedAllowance_FallsBackToYtdThresholdEstimate()
+    {
+        var pastDate = DateOnly.FromDateTime(DateTime.UtcNow).AddDays(-5);
+        var settings = new AppSettings
+        {
+            ElectricHeatingRegistered = true,
+            SelectedMeteringPointGsrn = "571234567890123456",
+            ReducedElafgiftRateDkkPerKwh = 0.004m,
+        };
+        _settingsRepository.Setup(r => r.GetAsync(It.IsAny<CancellationToken>())).ReturnsAsync(settings);
+        _seedRepository.Setup(r => r.GetAllAsync(It.IsAny<CancellationToken>())).ReturnsAsync(Seeds);
+        _tariffRepository
+            .Setup(r => r.GetByChargeTypeCodeAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<DateOnly>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(FlatRow(NationwideCharges.SystemOperatorGln, NationwideCharges.ElafgiftChargeTypeCode, NationwideCharges.NormalElafgiftDkkPerKwh));
+        _tariffRepository
+            .Setup(r => r.GetAllRowsAsync(NationwideCharges.SystemOperatorGln, It.IsAny<DateOnly>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([]);
+        _consumptionRepository
+            .Setup(r => r.GetDailyKwhAsync("571234567890123456", pastDate, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(10m);
+        // No recorded allowance -> falls back to (threshold - YTD as of the day before) as the allowance.
+        // Already 3998 kWh in for the year before this day started, so only 2 kWh of the day's 10 kWh
+        // still gets the normal rate; the remaining 8 kWh gets the reduced rate.
+        _consumptionRepository
+            .Setup(r => r.GetYearToDateKwhAsync("571234567890123456", pastDate.AddDays(-1), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(3998m);
+        _elafgiftAllowanceRepository
+            .Setup(r => r.GetAsync("571234567890123456", pastDate, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((ElafgiftDailyAllowance?)null);
+
+        var sut = CreateSut();
+        var atUtc = new DateTimeOffset(pastDate.Year, pastDate.Month, pastDate.Day, 10, 0, 0, TimeSpan.Zero);
+        var result = await sut.ResolveAsync(atUtc);
+
+        // 2 kWh at normal (0.008) + 8 kWh at reduced (0.004) over 10 kWh total -> blended 0.0048.
+        Assert.Equal(0.0048m, result.ElafgiftDkkPerKwh);
+        Assert.True(result.ElafgiftReducedApplied);
     }
 }

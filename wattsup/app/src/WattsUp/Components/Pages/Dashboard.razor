@@ -2,6 +2,7 @@
 @implements IDisposable
 @inject ISettingsService SettingsService
 @inject IPriceCalculationService PriceCalculationService
+@inject IPriceTrendService PriceTrendService
 @inject ISpotPriceRepository SpotPriceRepository
 @inject DiagnosticsStatusService DiagnosticsStatus
 
@@ -13,10 +14,10 @@
 {
     <MudProgressCircular Indeterminate="true" />
 }
-else if (_priceAreas.Count == 0)
+else if (string.IsNullOrWhiteSpace(_priceArea))
 {
     <MudAlert Severity="Severity.Info">
-        No price areas are tracked yet. Head to <MudLink Href="settings">Settings</MudLink> to pick DK1 and/or DK2.
+        No price area is tracked yet. Head to <MudLink Href="settings">Settings</MudLink> to pick DK1 or DK2.
     </MudAlert>
 }
 else
@@ -26,41 +27,42 @@ else
         <StalenessBadge Label="Tariffs" Status="@DiagnosticsStatus.TariffPoll" WarnAfter="TimeSpan.FromDays(2)" StaleAfter="TimeSpan.FromDays(3)" />
     </MudStack>
 
-    <MudGrid>
-        @foreach (var area in _priceAreas)
-        {
+    @if (_breakdown is not null)
+    {
+        <MudGrid>
             <MudItem xs="12" sm="6" md="4">
-                @if (_breakdowns.TryGetValue(area, out var breakdown))
-                {
-                    <PriceBreakdownCard PriceArea="@area" Breakdown="@breakdown" />
-                }
+                <PriceBreakdownCard PriceArea="@_priceArea" Breakdown="@_breakdown" />
             </MudItem>
-        }
-    </MudGrid>
+            <MudItem xs="12" sm="6" md="4">
+                <CheapestPeriodsCard Periods="@_cheapestPeriods" />
+            </MudItem>
+            <MudItem xs="12" sm="6" md="4">
+                <PriceTrendCard HourOverHour="@_hourOverHourTrend" TodayRange="@_todayRange" SameHour="@_sameHourComparison" AverageComparison="@_averageComparison" />
+            </MudItem>
+        </MudGrid>
+    }
 
     <MudText Typo="Typo.h5" Class="mt-6 mb-2">Today &amp; tomorrow</MudText>
-    <MudTabs Elevation="0" Rounded="true">
-        @foreach (var area in _priceAreas)
-        {
-            <MudTabPanel Text="@area.ToUpperInvariant()">
-                @if (_chartPoints.TryGetValue(area, out var points) && points.Count > 0)
-                {
-                    <PriceChart Points="@points" />
-                }
-                else
-                {
-                    <MudAlert Severity="Severity.Info" Class="mt-2">No price data cached yet for @area — the poller runs on startup and hourly.</MudAlert>
-                }
-            </MudTabPanel>
-        }
-    </MudTabs>
+    @if (_chartPoints.Count > 0)
+    {
+        <PriceChart Points="@_chartPoints" />
+    }
+    else
+    {
+        <MudAlert Severity="Severity.Info" Class="mt-2">No price data cached yet for @_priceArea — the poller runs on startup and hourly.</MudAlert>
+    }
 }
 
 @code {
     private bool _loading = true;
-    private List<string> _priceAreas = [];
-    private readonly Dictionary<string, PriceBreakdown> _breakdowns = [];
-    private readonly Dictionary<string, List<(DateTimeOffset, decimal)>> _chartPoints = [];
+    private string? _priceArea;
+    private PriceBreakdown? _breakdown;
+    private List<(DateTimeOffset, decimal)> _chartPoints = [];
+    private IReadOnlyList<CheapestPeriodResult> _cheapestPeriods = [];
+    private HourOverHourTrend? _hourOverHourTrend;
+    private TodayPriceRange? _todayRange;
+    private SameHourComparison? _sameHourComparison;
+    private AverageComparison? _averageComparison;
     private Timer? _refreshTimer;
 
     protected override async Task OnInitializedAsync()
@@ -81,28 +83,47 @@ else
     private async Task RefreshAsync()
     {
         var settings = await SettingsService.GetAsync();
-        _priceAreas = settings.PriceAreas.ToList();
+        _priceArea = settings.PriceArea;
+
+        if (string.IsNullOrWhiteSpace(_priceArea))
+        {
+            _breakdown = null;
+            _chartPoints = [];
+            _cheapestPeriods = [];
+            _hourOverHourTrend = null;
+            _todayRange = null;
+            _sameHourComparison = null;
+            _averageComparison = null;
+            return;
+        }
 
         var nowUtc = DateTimeOffset.UtcNow;
-        foreach (var area in _priceAreas)
+        _breakdown = await PriceCalculationService.CalculateAsync(_priceArea, nowUtc);
+
+        var localNow = TimeZoneInfo.ConvertTime(nowUtc, WattsUp.Services.Tariffs.TariffResolutionService.CopenhagenTimeZone);
+        var localMidnight = new DateTimeOffset(localNow.Date, localNow.Offset);
+        var fromUtc = localMidnight.ToUniversalTime();
+        var toUtc = fromUtc.AddDays(2);
+
+        var spotPrices = await SpotPriceRepository.GetRangeAsync(_priceArea, fromUtc, toUtc);
+        var points = new List<(DateTimeOffset, decimal)>();
+        var utcPoints = new List<(DateTimeOffset AtUtc, decimal TotalDkkPerKwh)>();
+        foreach (var spot in spotPrices)
         {
-            _breakdowns[area] = await PriceCalculationService.CalculateAsync(area, nowUtc);
-
-            var localNow = TimeZoneInfo.ConvertTime(nowUtc, WattsUp.Services.Tariffs.TariffResolutionService.CopenhagenTimeZone);
-            var localMidnight = new DateTimeOffset(localNow.Date, localNow.Offset);
-            var fromUtc = localMidnight.ToUniversalTime();
-            var toUtc = fromUtc.AddDays(2);
-
-            var spotPrices = await SpotPriceRepository.GetRangeAsync(area, fromUtc, toUtc);
-            var points = new List<(DateTimeOffset, decimal)>();
-            foreach (var spot in spotPrices)
-            {
-                var breakdown = await PriceCalculationService.CalculateAsync(area, spot.TimeUtc);
-                var local = TimeZoneInfo.ConvertTime(spot.TimeUtc, WattsUp.Services.Tariffs.TariffResolutionService.CopenhagenTimeZone);
-                points.Add((local, breakdown.TotalDkkPerKwh));
-            }
-            _chartPoints[area] = points;
+            var breakdown = await PriceCalculationService.CalculateAsync(_priceArea, spot.TimeUtc);
+            var local = TimeZoneInfo.ConvertTime(spot.TimeUtc, WattsUp.Services.Tariffs.TariffResolutionService.CopenhagenTimeZone);
+            points.Add((local, breakdown.TotalDkkPerKwh));
+            utcPoints.Add((spot.TimeUtc, breakdown.TotalDkkPerKwh));
         }
+        _chartPoints = points;
+        // Contiguity checks use UTC, not the localized display times above, so a DST transition
+        // (a 23- or 25-hour local day) can't be mistaken for a gap in the hourly data.
+        _cheapestPeriods = CheapestPeriodCalculator.FindCheapestPeriods(utcPoints, [1, 2, 3, 4, 5, 6]);
+
+        _hourOverHourTrend = await PriceTrendService.GetHourOverHourTrendAsync(_priceArea, nowUtc);
+        _todayRange = await PriceTrendService.GetTodayRangeAsync(_priceArea, nowUtc);
+        _sameHourComparison = await PriceTrendService.GetSameHourLastNDaysAsync(_priceArea, nowUtc);
+        _averageComparison = await PriceTrendService.GetTodayVsLastNDaysAverageAsync(_priceArea, nowUtc);
     }
 
     private void OnSettingsChanged() => InvokeAsync(async () =>

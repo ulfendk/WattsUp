@@ -37,6 +37,7 @@ public sealed class EloverblikConsumptionPollingService(
 
         var settingsRepository = scope.ServiceProvider.GetRequiredService<ISettingsRepository>();
         var consumptionRepository = scope.ServiceProvider.GetRequiredService<IConsumptionRepository>();
+        var elafgiftAllowanceRepository = scope.ServiceProvider.GetRequiredService<IElafgiftAllowanceRepository>();
 
         try
         {
@@ -56,6 +57,22 @@ public sealed class EloverblikConsumptionPollingService(
                 readings.Select(r => new ConsumptionReading(settings.SelectedMeteringPointGsrn, r.Date, r.Kwh)), ct);
 
             diagnosticsStatus.ReportConsumptionSuccess();
+
+            // Item 13: the secondary "elvarme" metering point's daily "consumption" figure is
+            // actually Eloverblik's distributed elafgift allowance for that day — same API shape,
+            // just a different GSRN. Eloverblik settles this at least a day later than normal
+            // consumption, so only ask up to 2 days back rather than up to today.
+            if (!string.IsNullOrWhiteSpace(settings.SelectedElafgiftAllowanceMeteringPointGsrn))
+            {
+                var allowanceToDate = toDate.AddDays(-2);
+                var allowanceReadings = await eloverblikClient.GetDailyConsumptionAsync(
+                    settings.SelectedElafgiftAllowanceMeteringPointGsrn, fromDate, allowanceToDate, ct);
+
+                await elafgiftAllowanceRepository.UpsertManyAsync(
+                    allowanceReadings.Select(r => new ElafgiftDailyAllowance(
+                        settings.SelectedMeteringPointGsrn, r.Date, r.Kwh, "eloverblik_secondary_mp")),
+                    ct);
+            }
         }
         catch (Exception ex)
         {

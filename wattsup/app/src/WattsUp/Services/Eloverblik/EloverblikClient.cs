@@ -43,7 +43,10 @@ public sealed class EloverblikClient : IEloverblikClient
             return [];
         }
 
-        using var request = new HttpRequestMessage(HttpMethod.Get, "api/meteringpoints/meteringpoints?includeAll=false");
+        // includeAll=true (backlog item 13): also returns secondary/child metering points, notably
+        // the "elvarme" one Eloverblik uses to distribute the 4000 kWh/year elafgift allowance
+        // day by day — without it, only the primary household metering point would be listed.
+        using var request = new HttpRequestMessage(HttpMethod.Get, "api/meteringpoints/meteringpoints?includeAll=true");
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
         try
