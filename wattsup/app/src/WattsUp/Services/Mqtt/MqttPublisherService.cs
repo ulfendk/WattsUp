@@ -193,6 +193,7 @@ public sealed class MqttPublisherService : BackgroundService, IMqttPublisherServ
         vat_amount_dkk_per_kwh = b.VatAmountDkkPerKwh,
         fully_resolved = b.FullyResolved,
         as_of_utc = b.AtUtc.ToString("O"),
+        price_period_start_utc = b.PricePeriodStartUtc?.ToString("O"),
     };
 
     /// <summary>Backlog item 7: publishes the cheapest 1–6 hour contiguous window's start time,

@@ -28,8 +28,10 @@ WattsUp publishes a `sensor.wattsup_price_<area>` entity (auto-created via MQTT 
 whichever single price area is currently tracked — switching areas removes the old sensor) with:
 - **State**: the current all-in price in DKK/kWh (spot + grid tariff + system tariff +
   transmission tariff + elafgift + your markup, with VAT applied if enabled).
-- **Attributes**: the full cost breakdown, whether the reduced elafgift rate is in effect, and
-  whether every input resolved from live data or fell back to a cached/seeded value.
+- **Attributes**: the full cost breakdown, whether the reduced elafgift rate is in effect, whether
+  every input resolved from live data or fell back to a cached/seeded value, and
+  `price_period_start_utc` — the start of the (15-minute, as of Denmark's current market
+  resolution) settlement period this price actually covers.
 
 Six `sensor.wattsup_cheapest_start_<n>h` entities (n = 1–6) publish the start time of the cheapest
 contiguous window of that many hours, over whatever price data is cached — the state is a

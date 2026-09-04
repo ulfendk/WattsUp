@@ -3,7 +3,13 @@
     <MudCardHeader>
         <CardHeaderContent>
             <MudText Typo="Typo.h6">@PriceArea.ToUpperInvariant()</MudText>
-            <MudText Typo="Typo.caption">Current actual price</MudText>
+            <MudText Typo="Typo.caption">
+                Current actual price
+                @if (Breakdown.PricePeriodStartUtc is not null)
+                {
+                    <text> (as of @ToLocal(Breakdown.PricePeriodStartUtc.Value).ToString("HH:mm", CultureInfo.CurrentCulture))</text>
+                }
+            </MudText>
         </CardHeaderContent>
         <CardHeaderActions>
             @if (!Breakdown.FullyResolved)
@@ -61,4 +67,7 @@
     // Backlog item 6: four decimals (øre/kWh markup precision is genuinely 4 decimals in DKK/kWh
     // terms), formatted using the client's own locale rather than the server's.
     private static string Fmt(decimal value) => value.ToString("N4", CultureInfo.CurrentCulture);
+
+    private static DateTimeOffset ToLocal(DateTimeOffset atUtc) =>
+        TimeZoneInfo.ConvertTime(atUtc, WattsUp.Services.Tariffs.TariffResolutionService.CopenhagenTimeZone);
 }

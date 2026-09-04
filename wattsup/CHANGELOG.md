@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.4 — 2026-09-04
+
+- The Dashboard's price card now shows the actual price period's start time ("Current actual
+  price (as of 07:30)") instead of leaving it implicit — with 15-minute settlement periods, the
+  price shown can be for a period that started up to 15 minutes before "now". Also added to the
+  `sensor.wattsup_price_<area>` attributes as `price_period_start_utc`.
+
 ## 0.2.3 — 2026-09-04
 
 - Fix: the `sensor.wattsup_cheapest_start_<n>h` entities' icon never showed in Home Assistant —

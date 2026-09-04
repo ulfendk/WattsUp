@@ -34,7 +34,8 @@ public sealed class PriceCalculationService(
             spotPrice, spotRecord is not null,
             tariffs,
             markup,
-            settings.VatEnabled);
+            settings.VatEnabled,
+            spotRecord?.TimeUtc);
     }
 
     /// <summary>Pure formula, split out so the worked example can be verified without any I/O.</summary>
@@ -43,7 +44,8 @@ public sealed class PriceCalculationService(
         decimal spotPriceDkkPerKwh, bool spotPriceResolved,
         TariffResolution tariffs,
         decimal markupDkkPerKwh,
-        bool vatEnabled)
+        bool vatEnabled,
+        DateTimeOffset? pricePeriodStartUtc = null)
     {
         var subtotal = spotPriceDkkPerKwh
             + tariffs.GridTariffDkkPerKwh
@@ -62,6 +64,7 @@ public sealed class PriceCalculationService(
         {
             PriceArea = priceArea,
             AtUtc = atUtc,
+            PricePeriodStartUtc = pricePeriodStartUtc,
             SpotPriceDkkPerKwh = spotPriceDkkPerKwh,
             SpotPriceResolved = spotPriceResolved,
             GridTariffDkkPerKwh = tariffs.GridTariffDkkPerKwh,
