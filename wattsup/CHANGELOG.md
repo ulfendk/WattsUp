@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.2.1 — 2026-09-04
+
+- Fix: cheapest-period durations of 2–6 hours never found a result (only the 1-hour one worked,
+  and even that was really just the single cheapest quarter-hour, not an hour's average) — the
+  Danish day-ahead market moved to 15-minute settlement periods, and `CheapestPeriodCalculator`
+  still assumed exactly one price point per hour. Now buckets to true hourly averages first, so it
+  works regardless of the source data's resolution.
+- Fix (latent, caught while fixing the above): the price chart's x-axis label spacing was
+  similarly hardcoded assuming hourly points — with the same 15-minute data it would have quietly
+  gone back to labeling every 1.5 hours (4x too dense, reintroducing the 0.2.0 "garbled" bug).
+  Spacing is now derived from the data's actual resolution.
+
 ## 0.2.0 — 2026-09-04
 
 - Single tracked price area (was multi-select) — switching regions now removes the old one's HA

@@ -26,11 +26,15 @@
 
     protected override void OnParametersSet()
     {
-        // MudChart renders every label with no auto-thinning — with up to 48 hourly points (today +
-        // tomorrow), that's 48 full "HH:mm" strings crammed into the x-axis, which overlap into
-        // unreadable, "garbled" text (also part of backlog item 10). Label every 6th hour, rotated,
-        // so consecutive labels don't run into each other.
-        const int labelStride = 6;
+        // MudChart renders every label with no auto-thinning — cramming a full "HH:mm" string per
+        // point onto the x-axis overlaps into unreadable, "garbled" text (backlog item 10). Label
+        // roughly every 6 hours, rotated, so consecutive labels don't run into each other. The
+        // stride is derived from the actual point spacing rather than hardcoded, because
+        // Denmark's day-ahead prices moved from hourly to 15-minute resolution — hardcoding "every
+        // 6th point" assuming hourly data would silently go back to labeling every 1.5 hours (4x
+        // too dense) the moment the API's resolution changes again.
+        var pointsPerHour = PointsPerHour();
+        var labelStride = Math.Max(1, pointsPerHour * 6);
         _labels = Points.Select((p, i) => i % labelStride == 0 ? p.AtLocal.ToString("HH:mm") : "").ToArray();
         _series =
         [
@@ -40,5 +44,16 @@
                 Data = Points.Select(p => (double)p.TotalDkkPerKwh).ToArray(),
             },
         ];
+    }
+
+    private int PointsPerHour()
+    {
+        if (Points.Count < 2)
+        {
+            return 1;
+        }
+
+        var deltaHours = (Points[1].AtLocal - Points[0].AtLocal).TotalHours;
+        return deltaHours > 0 ? Math.Max(1, (int)Math.Round(1.0 / deltaHours)) : 1;
     }
 }

@@ -76,4 +76,60 @@ public class CheapestPeriodCalculatorTests
         Assert.Equal(3, results.Count);
         Assert.All(results, r => Assert.Equal(0.1m, r.AveragePriceDkkPerKwh));
     }
+
+    // Denmark's day-ahead market moved to 15-minute settlement periods — regression coverage for
+    // that: multi-hour windows must still be found, and each hour's price must be the average of
+    // its four quarter-hour prices, not just one of them.
+    [Fact]
+    public void FindCheapestPeriods_QuarterHourlyResolution_AveragesToHoursBeforeSearching()
+    {
+        var start = new DateTimeOffset(2026, 1, 15, 0, 0, 0, TimeSpan.Zero);
+        var prices = new List<(DateTimeOffset, decimal)>();
+        // Hour 0: avg 1.0 (expensive). Hour 1: avg 0.2 (cheap). Hour 2: avg 0.2 (cheap).
+        foreach (var (hour, quarterPrices) in new[]
+        {
+            (0, new[] { 0.9m, 1.0m, 1.0m, 1.1m }),
+            (1, new[] { 0.1m, 0.2m, 0.2m, 0.3m }),
+            (2, new[] { 0.15m, 0.2m, 0.2m, 0.25m }),
+        })
+        {
+            for (var q = 0; q < 4; q++)
+            {
+                prices.Add((start.AddHours(hour).AddMinutes(q * 15), quarterPrices[q]));
+            }
+        }
+
+        var results = CheapestPeriodCalculator.FindCheapestPeriods(prices, [1, 2]);
+
+        Assert.Equal(2, results.Count);
+        var oneHour = results.Single(r => r.DurationHours == 1);
+        Assert.Equal(start.AddHours(1), oneHour.StartAtUtc);
+        Assert.Equal(0.2m, oneHour.AveragePriceDkkPerKwh);
+
+        var twoHour = results.Single(r => r.DurationHours == 2);
+        Assert.Equal(start.AddHours(1), twoHour.StartAtUtc);
+        Assert.Equal(0.2m, twoHour.AveragePriceDkkPerKwh);
+    }
+
+    [Fact]
+    public void FindCheapestPeriods_QuarterHourlyResolution_GapWithinAnHourStillCountsAsThatHour()
+    {
+        // A single missing quarter-hour shouldn't create a false "gap" at the hourly level once
+        // bucketed — only a genuinely missing hour (backlog-relevant when a poll hasn't run yet)
+        // should break contiguity.
+        var start = new DateTimeOffset(2026, 1, 15, 0, 0, 0, TimeSpan.Zero);
+        var prices = new List<(DateTimeOffset, decimal)>
+        {
+            (start, 0.5m),
+            // start.AddMinutes(15) missing
+            (start.AddMinutes(30), 0.5m),
+            (start.AddMinutes(45), 0.5m),
+            (start.AddHours(1), 0.1m),
+        };
+
+        var results = CheapestPeriodCalculator.FindCheapestPeriods(prices, [2]);
+
+        Assert.Single(results);
+        Assert.Equal(start, results[0].StartAtUtc);
+    }
 }

@@ -1,5 +1,5 @@
 name: "WattsUp"
-version: "0.2.0"
+version: "0.2.1"
 slug: "wattsup"
 description: "Danish electricity price tracker and cost breakdown"
 url: "https://github.com/ulfendk/WattsUp"

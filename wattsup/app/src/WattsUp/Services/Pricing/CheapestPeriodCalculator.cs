@@ -4,15 +4,22 @@ public sealed record CheapestPeriodResult(int DurationHours, DateTimeOffset Star
 
 /// <summary>
 /// Backlog item 7: the cheapest contiguous window of 1–6 hours of continuous use, over whatever
-/// hourly price data is already available (today + published day-ahead prices) — no prediction
-/// engine involved, so no confidence figure is produced either.
+/// price data is already available (today + published day-ahead prices) — no prediction engine
+/// involved, so no confidence figure is produced either.
 /// </summary>
 public static class CheapestPeriodCalculator
 {
     public static IReadOnlyList<CheapestPeriodResult> FindCheapestPeriods(
         IReadOnlyList<(DateTimeOffset AtUtc, decimal TotalDkkPerKwh)> hourlyPrices, IReadOnlyList<int> durationsHours)
     {
-        var sorted = hourlyPrices.OrderBy(p => p.AtUtc).ToList();
+        // Bucket to true clock hours first — Denmark's day-ahead market moved to 15-minute
+        // settlement periods, so the raw data is no longer necessarily one point per hour. Without
+        // this, "N hours" windows found almost no valid runs (adjacent 15-minute points are 15
+        // minutes apart, not the 1 hour IsContiguousHourly checks for), and even a "1 hour" window
+        // was really just the single cheapest quarter-hour, not an hour's average. Averaging per
+        // hour first makes the rest of this resolution-agnostic: it works the same whether the
+        // input is quarter-hourly, hourly, or anything else.
+        var sorted = ToHourlyAverages(hourlyPrices);
         var results = new List<CheapestPeriodResult>();
 
         foreach (var duration in durationsHours)
@@ -26,6 +33,17 @@ public static class CheapestPeriodCalculator
 
         return results;
     }
+
+    private static List<(DateTimeOffset AtUtc, decimal TotalDkkPerKwh)> ToHourlyAverages(
+        IReadOnlyList<(DateTimeOffset AtUtc, decimal TotalDkkPerKwh)> prices) =>
+        prices
+            .GroupBy(p => FloorToHour(p.AtUtc))
+            .OrderBy(g => g.Key)
+            .Select(g => (AtUtc: g.Key, TotalDkkPerKwh: g.Average(p => p.TotalDkkPerKwh)))
+            .ToList();
+
+    private static DateTimeOffset FloorToHour(DateTimeOffset value) =>
+        new(value.Year, value.Month, value.Day, value.Hour, 0, 0, value.Offset);
 
     private static CheapestPeriodResult? FindCheapestWindow(
         List<(DateTimeOffset AtUtc, decimal TotalDkkPerKwh)> sorted, int durationHours)
