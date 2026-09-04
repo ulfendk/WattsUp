@@ -10,6 +10,9 @@ public interface IConsumptionRepository
 
     /// <summary>Sum of consumption from Jan 1 of <paramref name="asOfDate"/>'s year through that date, inclusive.</summary>
     Task<decimal> GetYearToDateKwhAsync(string gsrn, DateOnly asOfDate, CancellationToken ct = default);
+
+    /// <summary>Total consumption recorded for one specific day, or 0 if none is recorded yet.</summary>
+    Task<decimal> GetDailyKwhAsync(string gsrn, DateOnly date, CancellationToken ct = default);
 }
 
 public sealed class ConsumptionRepository(ISqliteConnectionFactory connectionFactory) : IConsumptionRepository
@@ -45,5 +48,15 @@ public sealed class ConsumptionRepository(ISqliteConnectionFactory connectionFac
             new { gsrn, yearStart, asOf });
 
         return (decimal)(sum ?? 0);
+    }
+
+    public async Task<decimal> GetDailyKwhAsync(string gsrn, DateOnly date, CancellationToken ct = default)
+    {
+        using var connection = connectionFactory.CreateOpenConnection();
+        var kwh = await connection.ExecuteScalarAsync<double?>(
+            "SELECT kwh FROM consumption_readings WHERE gsrn = @gsrn AND date = @date;",
+            new { gsrn, date = date.ToString("yyyy-MM-dd") });
+
+        return (decimal)(kwh ?? 0);
     }
 }

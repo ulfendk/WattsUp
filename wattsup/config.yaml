@@ -1,5 +1,5 @@
 name: "WattsUp"
-version: "0.1.2"
+version: "0.2.0"
 slug: "wattsup"
 description: "Danish electricity price tracker and cost breakdown"
 url: "https://github.com/ulfendk/WattsUp"
@@ -16,6 +16,9 @@ panel_title: WattsUp
 # Not admin-only — pricing/tariff settings are household-wide, not sensitive per-user data.
 panel_admin: false
 hassio_api: true
+# Lets the Supervisor proxy /core/* to Home Assistant's own REST API (GET /api/states), used to
+# list candidate power/energy sensor entities for consumption-device cost tracking (backlog item 4).
+homeassistant_api: true
 
 # Auto-discovers a configured MQTT broker (e.g. the Mosquitto add-on) to publish HA sensor
 # entities via MQTT Discovery. WattsUp runs fine with this unavailable — it just skips publishing.

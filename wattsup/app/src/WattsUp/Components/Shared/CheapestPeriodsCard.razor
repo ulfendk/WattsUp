@@ -1,0 +1,41 @@
+@using System.Globalization
+<MudCard Outlined="true">
+    <MudCardHeader>
+        <CardHeaderContent>
+            <MudText Typo="Typo.h6">Cheapest periods</MudText>
+            <MudText Typo="Typo.caption">Best contiguous window to start using power, per duration</MudText>
+        </CardHeaderContent>
+    </MudCardHeader>
+    <MudCardContent>
+        @if (Periods.Count == 0)
+        {
+            <MudText Typo="Typo.body2">Not enough cached price data yet.</MudText>
+        }
+        else
+        {
+            <MudSimpleTable Dense="true" Hover="false" Elevation="0">
+                <thead>
+                    <tr><th>Duration</th><th>Start</th><th class="text-right">Avg. price</th></tr>
+                </thead>
+                <tbody>
+                    @foreach (var period in Periods.OrderBy(p => p.DurationHours))
+                    {
+                        <tr>
+                            <td>@period.DurationHours h</td>
+                            <td>@ToLocal(period.StartAtUtc).ToString("ddd HH:mm", CultureInfo.CurrentCulture)</td>
+                            <td class="text-right">@period.AveragePriceDkkPerKwh.ToString("N4", CultureInfo.CurrentCulture)</td>
+                        </tr>
+                    }
+                </tbody>
+            </MudSimpleTable>
+        }
+    </MudCardContent>
+</MudCard>
+
+@code {
+    [Parameter, EditorRequired]
+    public IReadOnlyList<CheapestPeriodResult> Periods { get; set; } = [];
+
+    private static DateTimeOffset ToLocal(DateTimeOffset atUtc) =>
+        TimeZoneInfo.ConvertTime(atUtc, WattsUp.Services.Tariffs.TariffResolutionService.CopenhagenTimeZone);
+}

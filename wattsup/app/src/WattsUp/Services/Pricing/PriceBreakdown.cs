@@ -23,6 +23,11 @@ public sealed record PriceBreakdown
 
     public required decimal SubtotalDkkPerKwh { get; init; }
     public required bool VatEnabled { get; init; }
+
+    /// <summary>The VAT amount itself (25% of <see cref="SubtotalDkkPerKwh"/> when <see cref="VatEnabled"/>,
+    /// else 0) — surfaced explicitly so the UI can show it instead of just an "included" flag.</summary>
+    public required decimal VatAmountDkkPerKwh { get; init; }
+
     public required decimal TotalDkkPerKwh { get; init; }
 
     /// <summary>True if every input was resolved from live/cached data rather than a fallback constant.</summary>

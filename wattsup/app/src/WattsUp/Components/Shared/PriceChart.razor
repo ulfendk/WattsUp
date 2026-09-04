@@ -7,11 +7,31 @@
 
     private List<ChartSeries<double>> _series = [];
     private string[] _labels = [];
-    private readonly ChartOptions _options = new() { ShowLegend = false };
+    // LineChartOptions (not the plain ChartOptions, which has no axis controls at all): YAxisTicks
+    // sets the step between horizontal gridlines, which MudBlazor 9.9 otherwise defaults to a fixed
+    // 20 regardless of the data's actual range — for DKK/kWh values that are normally well under
+    // 20, that squashes the whole line into an unreadable sliver at the bottom of the chart
+    // (backlog item 10's "garbled" chart bug: the line was technically there, just visually
+    // flattened to near-nothing, with only "0" and "20" as gridlines). YAxisTicks is int-only, so 1
+    // DKK/kWh is the finest step available; still far more legible than the default 20. Palette
+    // matches MainLayout's theme (item 8) — MudBlazor's own default starts with a purple this app
+    // avoids everywhere else.
+    private readonly LineChartOptions _options = new()
+    {
+        ShowLegend = false,
+        ChartPalette = ["#03A9F4"],
+        YAxisTicks = 1,
+        XAxisLabelRotation = -45,
+    };
 
     protected override void OnParametersSet()
     {
-        _labels = Points.Select(p => p.AtLocal.ToString("HH:mm")).ToArray();
+        // MudChart renders every label with no auto-thinning — with up to 48 hourly points (today +
+        // tomorrow), that's 48 full "HH:mm" strings crammed into the x-axis, which overlap into
+        // unreadable, "garbled" text (also part of backlog item 10). Label every 6th hour, rotated,
+        // so consecutive labels don't run into each other.
+        const int labelStride = 6;
+        _labels = Points.Select((p, i) => i % labelStride == 0 ? p.AtLocal.ToString("HH:mm") : "").ToArray();
         _series =
         [
             new ChartSeries<double>

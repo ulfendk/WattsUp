@@ -8,7 +8,7 @@ using WattsUp.Services.Tariffs;
 namespace WattsUp.BackgroundServices;
 
 /// <summary>
-/// Fetches DayAheadPrices for the tracked price areas and upserts them into <c>spot_prices</c>.
+/// Fetches DayAheadPrices for the tracked price area and upserts them into <c>spot_prices</c>.
 /// Polls hourly, plus a tighter 5-minute sweep between 13:00-14:00 CET, the window in which
 /// next-day prices are typically published.
 /// </summary>
@@ -41,7 +41,7 @@ public sealed class SpotPricePollingService(
         try
         {
             var settings = await settingsRepository.GetAsync(ct);
-            if (settings.PriceAreas.Count == 0)
+            if (string.IsNullOrWhiteSpace(settings.PriceArea))
             {
                 return;
             }
@@ -50,7 +50,7 @@ public sealed class SpotPricePollingService(
             var fromUtc = nowUtc.AddDays(-1);
             var toUtc = nowUtc.AddDays(2);
 
-            var records = await client.GetDayAheadPricesAsync(settings.PriceAreas, fromUtc, toUtc, ct);
+            var records = await client.GetDayAheadPricesAsync([settings.PriceArea], fromUtc, toUtc, ct);
             var mapped = records.Select(r => new SpotPriceRecord(
                 r.PriceArea, r.TimeUtc, r.TimeDk, r.DayAheadPriceDkk / 1000m));
 

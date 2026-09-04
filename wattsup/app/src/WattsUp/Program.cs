@@ -1,3 +1,6 @@
+using System.Globalization;
+using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.Localization;
 using MudBlazor.Services;
 using WattsUp.BackgroundServices;
 using WattsUp.Components;
@@ -5,8 +8,10 @@ using WattsUp.Data;
 using WattsUp.Data.Repositories;
 using WattsUp.Middleware;
 using WattsUp.Services.Diagnostics;
+using WattsUp.Services.Consumption;
 using WattsUp.Services.Eloverblik;
 using WattsUp.Services.EnergiDataService;
+using WattsUp.Services.Homeassistant;
 using WattsUp.Services.Mqtt;
 using WattsUp.Services.Pricing;
 using WattsUp.Services.Settings;
@@ -19,6 +24,14 @@ using var bootstrapLoggerFactory = LoggerFactory.Create(logging => logging.AddCo
 var addonOptions = AddonOptionsLoader.Load(bootstrapLoggerFactory.CreateLogger("Startup"));
 builder.Services.AddSingleton(addonOptions);
 
+// --- Data Protection keys, needed for MainLayout's persisted dark-mode toggle (ProtectedLocalStorage,
+// backlog item 8) — persisted alongside the SQLite DB under /data so the choice survives container
+// restarts/upgrades, falling back to the default (ephemeral, in-memory) key ring for local dev/tests.
+if (Directory.Exists("/data"))
+{
+    builder.Services.AddDataProtection().PersistKeysToFileSystem(new DirectoryInfo("/data/dataprotection-keys"));
+}
+
 // --- Data layer ---
 builder.Services.AddSingleton<ISqliteConnectionFactory, SqliteConnectionFactory>();
 builder.Services.AddSingleton<DatabaseMigrator>();
@@ -28,6 +41,9 @@ builder.Services.AddSingleton<ITariffRepository, TariffRepository>();
 builder.Services.AddSingleton<INationwideChargeSeedRepository, NationwideChargeSeedRepository>();
 builder.Services.AddSingleton<IMeteringPointRepository, MeteringPointRepository>();
 builder.Services.AddSingleton<IConsumptionRepository, ConsumptionRepository>();
+builder.Services.AddSingleton<IConsumptionDeviceRepository, ConsumptionDeviceRepository>();
+builder.Services.AddSingleton<IDeviceHourlyConsumptionRepository, DeviceHourlyConsumptionRepository>();
+builder.Services.AddSingleton<IElafgiftAllowanceRepository, ElafgiftAllowanceRepository>();
 
 // --- Diagnostics ---
 builder.Services.AddSingleton<DiagnosticsStatusService>();
@@ -36,6 +52,8 @@ builder.Services.AddSingleton<DiagnosticsStatusService>();
 builder.Services.AddSingleton<ISettingsService, SettingsService>();
 builder.Services.AddSingleton<ITariffResolutionService, TariffResolutionService>();
 builder.Services.AddSingleton<IPriceCalculationService, PriceCalculationService>();
+builder.Services.AddSingleton<IDeviceCostService, DeviceCostService>();
+builder.Services.AddSingleton<IPriceTrendService, PriceTrendService>();
 
 // --- External HTTP clients, all resilient (retry + circuit breaker) via Polly v8. ---
 builder.Services.AddHttpClient<IEnergiDataServiceClient, EnergiDataServiceClient>(client =>
@@ -56,6 +74,12 @@ builder.Services.AddHttpClient<ISupervisorApiClient, SupervisorApiClient>(client
     client.Timeout = TimeSpan.FromSeconds(10);
 }).AddStandardResilienceHandler();
 
+builder.Services.AddHttpClient<IHomeAssistantApiClient, HomeAssistantApiClient>(client =>
+{
+    client.BaseAddress = new Uri("http://supervisor/core/");
+    client.Timeout = TimeSpan.FromSeconds(10);
+}).AddStandardResilienceHandler();
+
 // --- MQTT ---
 builder.Services.AddSingleton<IMqttBrokerResolver, SupervisorMqttDiscoveryService>();
 builder.Services.AddSingleton<MqttPublisherService>();
@@ -66,6 +90,22 @@ builder.Services.AddHostedService(sp => sp.GetRequiredService<MqttPublisherServi
 builder.Services.AddHostedService<SpotPricePollingService>();
 builder.Services.AddHostedService<TariffPollingService>();
 builder.Services.AddHostedService<EloverblikConsumptionPollingService>();
+builder.Services.AddHostedService<DeviceConsumptionPollingService>();
+
+// --- Client-locale number formatting (backlog item 6) ---
+// No UI translation/resources here — just number formatting, so every known culture is "supported"
+// rather than a hand-curated list. App.razor detects navigator.language and redirects once through
+// /culture/set to persist it as a cookie; CultureInfo.CurrentCulture then reflects the client's own
+// locale (decimal separator etc.) for every request/render, not the server's.
+var allCultures = CultureInfo.GetCultures(CultureTypes.AllCultures)
+    .Where(c => !string.IsNullOrEmpty(c.Name))
+    .ToList();
+var localizationOptions = new RequestLocalizationOptions
+{
+    DefaultRequestCulture = new RequestCulture("en-US"),
+    SupportedCultures = allCultures,
+    SupportedUICultures = allCultures,
+};
 
 // --- Web UI ---
 builder.Services.AddMudServices();
@@ -100,7 +140,22 @@ app.UseMiddleware<IngressPathBaseMiddleware>();
 // the PathBase-stripped path in incomplete local tests that don't send a genuinely prefixed URL.
 app.UseRouting();
 
+app.UseRequestLocalization(localizationOptions);
+
 app.UseAntiforgery();
+
+app.MapGet("/culture/set", (string culture, string? redirectUri, HttpContext context) =>
+{
+    context.Response.Cookies.Append(
+        CookieRequestCultureProvider.DefaultCookieName,
+        CookieRequestCultureProvider.MakeCookieValue(new RequestCulture(culture)),
+        new CookieOptions { Expires = DateTimeOffset.UtcNow.AddYears(1), IsEssential = true });
+
+    // The caller (App.razor's inline detection script) always passes an ingress-PathBase-relative
+    // URL; this fallback only matters for a direct/manual hit on the endpoint.
+    var fallback = context.Request.PathBase.HasValue ? context.Request.PathBase.Value + "/" : "/";
+    return Results.LocalRedirect(string.IsNullOrWhiteSpace(redirectUri) ? fallback : redirectUri);
+});
 
 app.MapStaticAssets();
 app.MapRazorComponents<App>()

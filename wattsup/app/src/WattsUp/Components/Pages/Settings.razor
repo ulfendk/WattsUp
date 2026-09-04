@@ -3,6 +3,9 @@
 @inject WattsUp.Services.EnergiDataService.IEnergiDataServiceClient EnergiDataServiceClient
 @inject WattsUp.Services.Eloverblik.IEloverblikClient EloverblikClient
 @inject IMeteringPointRepository MeteringPointRepository
+@inject WattsUp.Services.Homeassistant.IHomeAssistantApiClient HomeAssistantApiClient
+@inject IConsumptionDeviceRepository ConsumptionDeviceRepository
+@inject WattsUp.Services.Mqtt.IMqttPublisherService MqttPublisherService
 @inject ISnackbar Snackbar
 
 <PageTitle>WattsUp — Settings</PageTitle>
@@ -16,8 +19,8 @@
 else
 {
     <MudPaper Class="pa-4 mb-4" Outlined="true">
-        <MudText Typo="Typo.h6" Class="mb-2">Price areas</MudText>
-        <MudSelect T="string" Label="Tracked price areas" MultiSelection="true" @bind-SelectedValues="_selectedPriceAreas">
+        <MudText Typo="Typo.h6" Class="mb-2">Price area</MudText>
+        <MudSelect T="string" Label="Tracked price area" @bind-Value="_selectedPriceArea">
             <MudSelectItem T="string" Value="@("DK1")">DK1</MudSelectItem>
             <MudSelectItem T="string" Value="@("DK2")">DK2</MudSelectItem>
         </MudSelect>
@@ -46,13 +49,13 @@ else
         <MudText Typo="Typo.h6" Class="mb-2">Electric heating &amp; VAT</MudText>
         <MudSwitch T="bool" @bind-Value="_electricHeatingRegistered" Label="Property registered for electric heating (reduced elafgift above 4000 kWh/year)" Color="Color.Primary" />
         <MudSwitch T="bool" @bind-Value="_vatEnabled" Label="Include 25% VAT in the published price" Color="Color.Primary" />
-        <MudNumericField T="decimal" Label="Reduced elafgift rate (DKK/kWh, fallback)" @bind-Value="_reducedElafgiftRate" Format="0.###" Min="0" />
+        <MudNumericField T="decimal" Label="Reduced elafgift rate (DKK/kWh, excl. VAT, fallback)" @bind-Value="_reducedElafgiftRate" Format="0.####" Min="0" />
     </MudPaper>
 
     <MudPaper Class="pa-4 mb-4" Outlined="true">
         <MudText Typo="Typo.h6" Class="mb-2">Supplier</MudText>
-        <MudNumericField T="decimal" Label="Markup (øre/kWh)" @bind-Value="_supplierMarkupOre" Format="0.##" Min="0" />
-        <MudNumericField T="decimal" Label="Monthly subscription fee (DKK, informational only)" @bind-Value="_supplierSubscriptionFee" Format="0.##" Min="0" />
+        <MudNumericField T="decimal" Label="Markup (øre/kWh, excl. VAT)" @bind-Value="_supplierMarkupOre" Format="0.####" Min="0" />
+        <MudNumericField T="decimal" Label="Monthly subscription fee (DKK, excl. VAT, informational only)" @bind-Value="_supplierSubscriptionFee" Format="0.####" Min="0" />
     </MudPaper>
 
     <MudPaper Class="pa-4 mb-4" Outlined="true">
@@ -81,6 +84,46 @@ else
                     <MudSelectItem T="string" Value="@mp.Gsrn">@mp.Gsrn @(mp.Address is null ? "" : $"— {mp.Address}")</MudSelectItem>
                 }
             </MudSelect>
+
+            @if (_electricHeatingRegistered)
+            {
+                <MudSelect T="string" Label="Elafgift allowance (elvarme) metering point — optional" @bind-Value="_selectedElafgiftAllowanceGsrn" Clearable="true"
+                           HelperText="If Eloverblik lists a separate secondary metering point for electric heating, pick it here so the reduced elafgift above 4000 kWh/year is distributed using its real daily figures instead of an estimate.">
+                    @foreach (var mp in _meteringPoints)
+                    {
+                        <MudSelectItem T="string" Value="@mp.Gsrn">@mp.Gsrn @(mp.Address is null ? "" : $"— {mp.Address}")</MudSelectItem>
+                    }
+                </MudSelect>
+            }
+        }
+    </MudPaper>
+
+    <MudPaper Class="pa-4 mb-4" Outlined="true">
+        <MudText Typo="Typo.h6" Class="mb-2">Consumption devices</MudText>
+        @if (!HomeAssistantApiClient.IsAvailable)
+        {
+            <MudAlert Severity="Severity.Info">
+                Home Assistant's Core API isn't reachable from here (no SUPERVISOR_TOKEN) — this only works
+                when WattsUp is running as an installed add-on.
+            </MudAlert>
+        }
+        else
+        {
+            <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-2">
+                <MudButton Variant="Variant.Outlined" OnClick="LoadConsumptionDevicesAsync" Disabled="@_loadingConsumptionDevices">
+                    @(_consumptionDevices.Count == 0 ? "Load devices" : "Refresh list")
+                </MudButton>
+                @if (_loadingConsumptionDevices)
+                {
+                    <MudProgressCircular Size="Size.Small" Indeterminate="true" />
+                }
+            </MudStack>
+            <MudSelect T="string" Label="Tracked devices" MultiSelection="true" @bind-SelectedValues="_selectedConsumptionDevices">
+                @foreach (var device in _consumptionDevices)
+                {
+                    <MudSelectItem T="string" Value="@device.EntityId">@(device.FriendlyName ?? device.EntityId)</MudSelectItem>
+                }
+            </MudSelect>
         }
     </MudPaper>
 
@@ -92,8 +135,9 @@ else
     private bool _saving;
     private bool _loadingGridCompanies;
     private bool _loadingMeteringPoints;
+    private bool _loadingConsumptionDevices;
 
-    private IReadOnlyCollection<string> _selectedPriceAreas = [];
+    private string _selectedPriceArea = "DK1";
     private string? _gridCompanyGln;
     private bool _electricHeatingRegistered;
     private bool _vatEnabled = true;
@@ -101,14 +145,17 @@ else
     private decimal _supplierMarkupOre;
     private decimal _supplierSubscriptionFee;
     private string? _selectedMeteringPointGsrn;
+    private string? _selectedElafgiftAllowanceGsrn;
 
     private List<(string GlnNumber, string ChargeOwner)> _gridCompanies = [];
     private List<MeteringPoint> _meteringPoints = [];
+    private List<ConsumptionDevice> _consumptionDevices = [];
+    private IReadOnlyCollection<string> _selectedConsumptionDevices = [];
 
     protected override async Task OnInitializedAsync()
     {
         var settings = await SettingsService.GetAsync();
-        _selectedPriceAreas = settings.PriceAreas.ToList();
+        _selectedPriceArea = settings.PriceArea;
         _gridCompanyGln = settings.GridCompanyGln;
         _electricHeatingRegistered = settings.ElectricHeatingRegistered;
         _vatEnabled = settings.VatEnabled;
@@ -116,6 +163,7 @@ else
         _supplierMarkupOre = settings.SupplierMarkupOrePerKwh;
         _supplierSubscriptionFee = settings.SupplierSubscriptionFeeDkkPerMonth;
         _selectedMeteringPointGsrn = settings.SelectedMeteringPointGsrn;
+        _selectedElafgiftAllowanceGsrn = settings.SelectedElafgiftAllowanceMeteringPointGsrn;
 
         if (!string.IsNullOrWhiteSpace(settings.GridCompanyGln) && !string.IsNullOrWhiteSpace(settings.GridCompanyName))
         {
@@ -123,6 +171,9 @@ else
         }
 
         _meteringPoints = (await MeteringPointRepository.GetAllAsync()).ToList();
+
+        _consumptionDevices = (await ConsumptionDeviceRepository.GetAllAsync()).ToList();
+        _selectedConsumptionDevices = _consumptionDevices.Where(d => d.IsSelected).Select(d => d.EntityId).ToList();
 
         _loading = false;
     }
@@ -157,6 +208,22 @@ else
         }
     }
 
+    private async Task LoadConsumptionDevicesAsync()
+    {
+        _loadingConsumptionDevices = true;
+        try
+        {
+            var entities = await HomeAssistantApiClient.GetPowerConsumptionEntitiesAsync();
+            await ConsumptionDeviceRepository.UpsertManyAsync(
+                entities.Select(e => new ConsumptionDevice(e.EntityId, e.FriendlyName, e.UnitOfMeasurement, e.DeviceClass, false)));
+            _consumptionDevices = (await ConsumptionDeviceRepository.GetAllAsync()).ToList();
+        }
+        finally
+        {
+            _loadingConsumptionDevices = false;
+        }
+    }
+
     private string GlnToDisplayName(string? gln) =>
         _gridCompanies.FirstOrDefault(c => c.GlnNumber == gln).ChargeOwner ?? gln ?? "";
 
@@ -165,27 +232,40 @@ else
         _saving = true;
         try
         {
+            var previousSettings = await SettingsService.GetAsync();
             var gridCompanyName = _gridCompanies.FirstOrDefault(c => c.GlnNumber == _gridCompanyGln).ChargeOwner;
 
             var settings = new AppSettings
             {
-                PriceAreas = _selectedPriceAreas.ToList(),
+                PriceArea = _selectedPriceArea,
                 GridCompanyGln = _gridCompanyGln,
                 GridCompanyName = gridCompanyName,
+                GridCompanySource = previousSettings.GridCompanySource,
+                SupplierSource = previousSettings.SupplierSource,
                 ElectricHeatingRegistered = _electricHeatingRegistered,
                 VatEnabled = _vatEnabled,
                 SupplierMarkupOrePerKwh = _supplierMarkupOre,
                 SupplierSubscriptionFeeDkkPerMonth = _supplierSubscriptionFee,
                 ReducedElafgiftRateDkkPerKwh = _reducedElafgiftRate,
                 SelectedMeteringPointGsrn = _selectedMeteringPointGsrn,
+                SelectedElafgiftAllowanceMeteringPointGsrn = _selectedElafgiftAllowanceGsrn,
             };
 
             await SettingsService.SaveAsync(settings);
+
+            // Region is single-select — if it changed, remove the old region's HA sensor instead
+            // of leaving it stale (backlog item 5).
+            if (!string.IsNullOrWhiteSpace(previousSettings.PriceArea) && previousSettings.PriceArea != _selectedPriceArea)
+            {
+                await MqttPublisherService.UnpublishPriceAreaAsync(previousSettings.PriceArea);
+            }
 
             if (!string.IsNullOrWhiteSpace(_selectedMeteringPointGsrn))
             {
                 await MeteringPointRepository.SetSelectedAsync(_selectedMeteringPointGsrn);
             }
+
+            await ConsumptionDeviceRepository.SetSelectedAsync(_selectedConsumptionDevices);
 
             Snackbar.Add("Settings saved.", Severity.Success);
         }

@@ -1,3 +1,4 @@
+@using System.Globalization
 <MudCard Outlined="true">
     <MudCardHeader>
         <CardHeaderContent>
@@ -14,26 +15,36 @@
         </CardHeaderActions>
     </MudCardHeader>
     <MudCardContent>
-        <MudText Typo="Typo.h3" Class="mb-2">@Breakdown.TotalDkkPerKwh.ToString("0.###") <MudText Typo="Typo.subtitle1" Class="d-inline">DKK/kWh</MudText></MudText>
+        <MudText Typo="Typo.h3" Class="mb-1">
+            @Fmt(Breakdown.TotalDkkPerKwh) <MudText Typo="Typo.subtitle1" Class="d-inline">DKK/kWh@(Breakdown.VatEnabled ? " incl. VAT" : "")</MudText>
+        </MudText>
+        @if (Breakdown.VatEnabled)
+        {
+            <MudText Typo="Typo.caption" Class="mb-2 d-block">of which VAT (25%): @Fmt(Breakdown.VatAmountDkkPerKwh) DKK/kWh</MudText>
+        }
 
         <MudSimpleTable Dense="true" Hover="false" Elevation="0">
             <tbody>
-                <tr><td>Spot price</td><td class="text-right">@Breakdown.SpotPriceDkkPerKwh.ToString("0.###")</td></tr>
-                <tr><td>Grid tariff</td><td class="text-right">@Breakdown.GridTariffDkkPerKwh.ToString("0.###")</td></tr>
-                <tr><td>System tariff</td><td class="text-right">@Breakdown.SystemTariffDkkPerKwh.ToString("0.###")</td></tr>
-                <tr><td>Transmission tariff</td><td class="text-right">@Breakdown.TransmissionTariffDkkPerKwh.ToString("0.###")</td></tr>
+                <tr><td>Spot price (excl. VAT)</td><td class="text-right">@Fmt(Breakdown.SpotPriceDkkPerKwh)</td></tr>
+                <tr><td>Grid tariff (excl. VAT)</td><td class="text-right">@Fmt(Breakdown.GridTariffDkkPerKwh)</td></tr>
+                <tr><td>System tariff (excl. VAT)</td><td class="text-right">@Fmt(Breakdown.SystemTariffDkkPerKwh)</td></tr>
+                <tr><td>Transmission tariff (excl. VAT)</td><td class="text-right">@Fmt(Breakdown.TransmissionTariffDkkPerKwh)</td></tr>
                 <tr>
-                    <td>Elafgift @(Breakdown.ElafgiftReducedApplied ? "(reduced)" : "(normal)")</td>
-                    <td class="text-right">@Breakdown.ElafgiftDkkPerKwh.ToString("0.###")</td>
+                    <td>Elafgift (excl. VAT, @(Breakdown.ElafgiftReducedApplied ? "reduced" : "normal"))</td>
+                    <td class="text-right">@Fmt(Breakdown.ElafgiftDkkPerKwh)</td>
                 </tr>
-                <tr><td>Supplier markup</td><td class="text-right">@Breakdown.MarkupDkkPerKwh.ToString("0.###")</td></tr>
+                <tr><td>Supplier markup (excl. VAT)</td><td class="text-right">@Fmt(Breakdown.MarkupDkkPerKwh)</td></tr>
                 <tr class="mud-theme-primary">
-                    <td><strong>Subtotal</strong></td>
-                    <td class="text-right"><strong>@Breakdown.SubtotalDkkPerKwh.ToString("0.###")</strong></td>
+                    <td><strong>Subtotal (excl. VAT)</strong></td>
+                    <td class="text-right"><strong>@Fmt(Breakdown.SubtotalDkkPerKwh)</strong></td>
                 </tr>
                 @if (Breakdown.VatEnabled)
                 {
-                    <tr><td>VAT (25%)</td><td class="text-right">included</td></tr>
+                    <tr><td>VAT (25%)</td><td class="text-right">@Fmt(Breakdown.VatAmountDkkPerKwh)</td></tr>
+                    <tr class="mud-theme-primary">
+                        <td><strong>Total (incl. VAT)</strong></td>
+                        <td class="text-right"><strong>@Fmt(Breakdown.TotalDkkPerKwh)</strong></td>
+                    </tr>
                 }
             </tbody>
         </MudSimpleTable>
@@ -46,4 +57,8 @@
 
     [Parameter, EditorRequired]
     public PriceBreakdown Breakdown { get; set; } = null!;
+
+    // Backlog item 6: four decimals (øre/kWh markup precision is genuinely 4 decimals in DKK/kWh
+    // terms), formatted using the client's own locale rather than the server's.
+    private static string Fmt(decimal value) => value.ToString("N4", CultureInfo.CurrentCulture);
 }

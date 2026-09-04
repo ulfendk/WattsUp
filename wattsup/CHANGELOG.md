@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.2.0 — 2026-09-04
+
+- Single tracked price area (was multi-select) — switching regions now removes the old one's HA
+  sensor instead of leaving it stale.
+- VAT clarity on the price card: every line item labeled excl./incl. VAT, an explicit VAT amount
+  row, and a "Total (incl. VAT)" row, instead of a bare "included" flag.
+- Numbers are now formatted using the client browser's own locale (decimal comma vs. point, etc.),
+  auto-detected once via a `/culture/set` redirect; table numbers and the markup field use 4
+  decimals.
+- HA consumption device integration: pick power/energy sensor entities in Settings (polled via Home
+  Assistant's own REST API, not MQTT) and see their hourly + current-hour DKK cost.
+- Cheapest continuous-use period sensors (`wattsup_cheapest_start_1h`..`_6h`) and a Dashboard card,
+  computed over already-cached price data.
+- Dashboard "Trends" card: hour-over-hour trend, today's min/max range, and 7-day comparisons.
+- Smarter reduced elafgift: distributes the electric-heating threshold as one blended rate per
+  completed day (using Eloverblik's secondary "elvarme" metering point when configured, else an
+  estimate from year-to-date consumption) instead of a hard cutover mid-day.
+- Theming now matches the sibling `timetracker` app: HA's default Material blue, persisted
+  dark/light mode (falls back to the browser's `prefers-color-scheme`), responsive drawer.
+- Fix: the hourly price chart's Y-axis defaulted to a fixed step of 20 regardless of the data's
+  actual (much smaller) range, squashing the line into an unreadable sliver; the x-axis also
+  crammed all 48 hourly labels in with no thinning, overlapping into illegible text.
+- Investigated and intentionally skipped: a suppliers list (no such data available from the APIs
+  already in use) and metering-point-driven supplier/grid-company prefill (Eloverblik's Customer
+  API doesn't expose that identity data) — see `BACKLOG.md` items 11–12.
+
 ## 0.1.2 — 2026-09-03
 
 - Fix: the grid-company picker only ever fetched a single unsorted 50,000-row page from

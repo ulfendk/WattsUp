@@ -6,9 +6,20 @@ namespace WattsUp.Services.Settings;
 /// </summary>
 public sealed record AppSettings
 {
-    public IReadOnlyList<string> PriceAreas { get; init; } = ["DK1"];
+    /// <summary>The single tracked price area/region (backlog item 5 — only one region at a time).</summary>
+    public string PriceArea { get; init; } = "DK1";
+
     public string? GridCompanyGln { get; init; }
     public string? GridCompanyName { get; init; }
+
+    /// <summary>Whether <see cref="GridCompanyGln"/>/<see cref="GridCompanyName"/> were auto-filled
+    /// from the selected metering point ("metering_point") or entered by hand ("manual").</summary>
+    public string GridCompanySource { get; init; } = "manual";
+
+    /// <summary>Whether the supplier fields were auto-filled from the metering point or entered
+    /// by hand — see <see cref="GridCompanySource"/>.</summary>
+    public string SupplierSource { get; init; } = "manual";
+
     public bool ElectricHeatingRegistered { get; init; }
     public bool VatEnabled { get; init; } = true;
     public decimal SupplierMarkupOrePerKwh { get; init; }
@@ -22,6 +33,10 @@ public sealed record AppSettings
     public decimal ReducedElafgiftRateDkkPerKwh { get; init; } = NationwideCharges.NormalElafgiftDkkPerKwh;
 
     public string? SelectedMeteringPointGsrn { get; init; }
+
+    /// <summary>The (optional) secondary "elvarme" metering point Eloverblik uses to distribute the
+    /// 4000 kWh/year elafgift allowance day by day — see <see cref="Tariffs.TariffResolutionService"/>.</summary>
+    public string? SelectedElafgiftAllowanceMeteringPointGsrn { get; init; }
 }
 
 /// <summary>

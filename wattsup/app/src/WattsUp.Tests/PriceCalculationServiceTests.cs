@@ -25,6 +25,7 @@ public class PriceCalculationServiceTests
             vatEnabled: true);
 
         Assert.Equal(0.803m, breakdown.SubtotalDkkPerKwh);
+        Assert.Equal(0.20075m, breakdown.VatAmountDkkPerKwh);
         Assert.Equal(1.00375m, breakdown.TotalDkkPerKwh);
         Assert.True(breakdown.FullyResolved);
     }
@@ -42,6 +43,7 @@ public class PriceCalculationServiceTests
             "DK1", DateTimeOffset.UtcNow, 0.450m, true, tariffs, 0.030m, vatEnabled: false);
 
         Assert.Equal(breakdown.SubtotalDkkPerKwh, breakdown.TotalDkkPerKwh);
+        Assert.Equal(0m, breakdown.VatAmountDkkPerKwh);
     }
 
     [Fact]

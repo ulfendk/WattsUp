@@ -52,7 +52,11 @@ public sealed class PriceCalculationService(
             + tariffs.ElafgiftDkkPerKwh
             + markupDkkPerKwh;
 
-        var total = vatEnabled ? subtotal * VatMultiplier : subtotal;
+        // Audited (backlog item 3): DayAheadPrices spot prices and DatahubPricelist tariff rows are
+        // both published ex-VAT by convention, and TariffResolutionService never applies VAT itself —
+        // this is the single place VAT is added, so there's no double-counting.
+        var vatAmount = vatEnabled ? subtotal * (VatMultiplier - 1m) : 0m;
+        var total = subtotal + vatAmount;
 
         return new PriceBreakdown
         {
@@ -70,6 +74,7 @@ public sealed class PriceCalculationService(
             MarkupDkkPerKwh = markupDkkPerKwh,
             SubtotalDkkPerKwh = subtotal,
             VatEnabled = vatEnabled,
+            VatAmountDkkPerKwh = vatAmount,
             TotalDkkPerKwh = total,
         };
     }

@@ -4,6 +4,7 @@ using MQTTnet;
 using WattsUp.Data.Repositories;
 using WattsUp.Services.Pricing;
 using WattsUp.Services.Settings;
+using WattsUp.Services.Tariffs;
 
 namespace WattsUp.Services.Mqtt;
 
@@ -21,31 +22,51 @@ public sealed class MqttPublisherService : BackgroundService, IMqttPublisherServ
 {
     private static readonly TimeSpan BoundaryInterval = TimeSpan.FromMinutes(15);
     private static readonly TimeSpan BrokerRetryInterval = TimeSpan.FromMinutes(1);
+    private static readonly int[] CheapestPeriodDurationsHours = [1, 2, 3, 4, 5, 6];
 
     private readonly IMqttBrokerResolver _brokerResolver;
     private readonly IPriceCalculationService _priceCalculationService;
     private readonly ISettingsRepository _settingsRepository;
+    private readonly ISpotPriceRepository _spotPriceRepository;
     private readonly ILogger<MqttPublisherService> _logger;
     private readonly IMqttClient _client;
     private readonly SemaphoreSlim _republishSignal = new(0, int.MaxValue);
     private readonly HashSet<string> _discoveredPriceAreas = [];
     private bool _diagnosticsDiscoveryPublished;
+    private bool _cheapestPeriodDiscoveryPublished;
 
     public MqttPublisherService(
         IMqttBrokerResolver brokerResolver,
         IPriceCalculationService priceCalculationService,
         ISettingsRepository settingsRepository,
-        ILogger<MqttPublisherService> logger)
+        ISpotPriceRepository spotPriceRepository,
+        ILogger<MqttPublisherService> logger,
+        Func<IMqttClient>? clientFactory = null)
     {
         _brokerResolver = brokerResolver;
         _priceCalculationService = priceCalculationService;
         _settingsRepository = settingsRepository;
+        _spotPriceRepository = spotPriceRepository;
         _logger = logger;
 
-        _client = new MqttClientFactory().CreateMqttClient();
+        // clientFactory is only ever supplied by tests (a real IMqttClient can't be constructed
+        // without MQTTnet's factory); DI falls back to this default when nothing is registered.
+        _client = (clientFactory ?? (() => new MqttClientFactory().CreateMqttClient()))();
     }
 
     public void RequestRepublish() => _republishSignal.Release();
+
+    public async Task UnpublishPriceAreaAsync(string priceArea, CancellationToken ct = default)
+    {
+        if (!_client.IsConnected && !await TryConnectAsync(ct))
+        {
+            return;
+        }
+
+        // HA MQTT Discovery convention: an empty retained payload on the config topic removes the entity.
+        await PublishAsync(MqttDiscoveryPayloadBuilder.PriceDiscoveryTopic(priceArea), "", retain: true);
+        _discoveredPriceAreas.Remove(priceArea);
+    }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -123,6 +144,7 @@ public sealed class MqttPublisherService : BackgroundService, IMqttPublisherServ
         // broker (e.g. the Mosquitto add-on was reinstalled) may have lost its retained messages.
         _discoveredPriceAreas.Clear();
         _diagnosticsDiscoveryPublished = false;
+        _cheapestPeriodDiscoveryPublished = false;
         await PublishAvailabilityAsync(online: true);
         return true;
     }
@@ -132,15 +154,17 @@ public sealed class MqttPublisherService : BackgroundService, IMqttPublisherServ
         var settings = await _settingsRepository.GetAsync(ct);
         var now = DateTimeOffset.UtcNow;
 
-        foreach (var priceArea in settings.PriceAreas)
+        if (!string.IsNullOrWhiteSpace(settings.PriceArea))
         {
-            await EnsurePriceDiscoveryAsync(priceArea);
+            await EnsurePriceDiscoveryAsync(settings.PriceArea);
 
-            var breakdown = await _priceCalculationService.CalculateAsync(priceArea, now, ct);
-            await PublishAsync(MqttDiscoveryPayloadBuilder.PriceStateTopic(priceArea),
+            var breakdown = await _priceCalculationService.CalculateAsync(settings.PriceArea, now, ct);
+            await PublishAsync(MqttDiscoveryPayloadBuilder.PriceStateTopic(settings.PriceArea),
                 breakdown.TotalDkkPerKwh.ToString("0.#####", CultureInfo.InvariantCulture), retain: false);
-            await PublishAsync(MqttDiscoveryPayloadBuilder.PriceAttributesTopic(priceArea),
+            await PublishAsync(MqttDiscoveryPayloadBuilder.PriceAttributesTopic(settings.PriceArea),
                 MqttDiscoveryPayloadBuilder.Serialize(BuildAttributes(breakdown)), retain: false);
+
+            await PublishCheapestPeriodsAsync(settings.PriceArea, now, ct);
         }
 
         await EnsureDiagnosticsDiscoveryAsync();
@@ -149,7 +173,7 @@ public sealed class MqttPublisherService : BackgroundService, IMqttPublisherServ
             MqttDiscoveryPayloadBuilder.Serialize(new
             {
                 last_published_utc = now.ToString("O"),
-                tracked_price_areas = settings.PriceAreas,
+                tracked_price_area = settings.PriceArea,
                 grid_company = settings.GridCompanyName,
             }),
             retain: false);
@@ -166,9 +190,56 @@ public sealed class MqttPublisherService : BackgroundService, IMqttPublisherServ
         markup_dkk_per_kwh = b.MarkupDkkPerKwh,
         vat_enabled = b.VatEnabled,
         subtotal_dkk_per_kwh = b.SubtotalDkkPerKwh,
+        vat_amount_dkk_per_kwh = b.VatAmountDkkPerKwh,
         fully_resolved = b.FullyResolved,
         as_of_utc = b.AtUtc.ToString("O"),
     };
+
+    /// <summary>Backlog item 7: publishes the cheapest 1–6 hour contiguous window's start time,
+    /// over whatever hourly prices are already cached (today + published day-ahead prices).</summary>
+    private async Task PublishCheapestPeriodsAsync(string priceArea, DateTimeOffset now, CancellationToken ct)
+    {
+        var localNow = TimeZoneInfo.ConvertTime(now, TariffResolutionService.CopenhagenTimeZone);
+        var localMidnight = new DateTimeOffset(localNow.Date, localNow.Offset);
+        var fromUtc = localMidnight.ToUniversalTime();
+        var toUtc = fromUtc.AddDays(2);
+
+        var spotPrices = await _spotPriceRepository.GetRangeAsync(priceArea, fromUtc, toUtc, ct);
+        var hourlyPrices = new List<(DateTimeOffset AtUtc, decimal TotalDkkPerKwh)>(spotPrices.Count);
+        foreach (var spot in spotPrices)
+        {
+            var breakdown = await _priceCalculationService.CalculateAsync(priceArea, spot.TimeUtc, ct);
+            hourlyPrices.Add((spot.TimeUtc, breakdown.TotalDkkPerKwh));
+        }
+
+        var results = CheapestPeriodCalculator.FindCheapestPeriods(hourlyPrices, CheapestPeriodDurationsHours);
+
+        await EnsureCheapestPeriodDiscoveryAsync();
+        foreach (var result in results)
+        {
+            await PublishAsync(
+                MqttDiscoveryPayloadBuilder.CheapestPeriodStateTopic(result.DurationHours),
+                result.StartAtUtc.ToString("O"),
+                retain: false);
+        }
+    }
+
+    private async Task EnsureCheapestPeriodDiscoveryAsync()
+    {
+        if (_cheapestPeriodDiscoveryPublished)
+        {
+            return;
+        }
+
+        foreach (var hours in CheapestPeriodDurationsHours)
+        {
+            await PublishAsync(
+                MqttDiscoveryPayloadBuilder.CheapestPeriodDiscoveryTopic(hours),
+                MqttDiscoveryPayloadBuilder.BuildCheapestPeriodDiscoveryPayload(hours),
+                retain: true);
+        }
+        _cheapestPeriodDiscoveryPublished = true;
+    }
 
     private async Task EnsurePriceDiscoveryAsync(string priceArea)
     {
