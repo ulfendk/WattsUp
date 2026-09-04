@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.2.2 — 2026-09-04
+
+- Fix: cheapest-period windows were snapped to hour boundaries even though Danish day-ahead
+  prices are 15-minute resolution — a genuinely cheaper window starting at, say, 11:15 was missed
+  in favor of a more expensive one starting at 11:00 or 12:00.
+  `CheapestPeriodCalculator` now slides at the data's native resolution instead of pre-bucketing
+  to hours, so a window can start at any quarter-hour.
+- The hourly price chart now shows the actual date/time (and price) in the hover tooltip for every
+  point, not just the ones with a visible axis label — switched from MudBlazor's generic Line
+  chart to its purpose-built Timeseries chart type, which carries a real timestamp per point
+  instead of a parallel string-label array. This also replaces the manual "every Nth point"
+  x-axis label thinning with the component's own time-based spacing, which is one less place that
+  needs to guess the source data's resolution.
+
 ## 0.2.1 — 2026-09-04
 
 - Fix: cheapest-period durations of 2–6 hours never found a result (only the 1-hour one worked,

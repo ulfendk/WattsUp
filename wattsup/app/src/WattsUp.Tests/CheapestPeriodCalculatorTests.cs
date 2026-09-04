@@ -81,7 +81,7 @@ public class CheapestPeriodCalculatorTests
     // that: multi-hour windows must still be found, and each hour's price must be the average of
     // its four quarter-hour prices, not just one of them.
     [Fact]
-    public void FindCheapestPeriods_QuarterHourlyResolution_AveragesToHoursBeforeSearching()
+    public void FindCheapestPeriods_QuarterHourlyResolution_FindsWindowsAtNativeResolution()
     {
         var start = new DateTimeOffset(2026, 1, 15, 0, 0, 0, TimeSpan.Zero);
         var prices = new List<(DateTimeOffset, decimal)>();
@@ -112,24 +112,41 @@ public class CheapestPeriodCalculatorTests
     }
 
     [Fact]
-    public void FindCheapestPeriods_QuarterHourlyResolution_GapWithinAnHourStillCountsAsThatHour()
+    public void FindCheapestPeriods_QuarterHourlyResolution_CheapestWindowNeedNotStartOnTheHour()
     {
-        // A single missing quarter-hour shouldn't create a false "gap" at the hourly level once
-        // bucketed — only a genuinely missing hour (backlog-relevant when a poll hasn't run yet)
-        // should break contiguity.
+        // The cheapest 1-hour-equivalent window (4 quarter-hours) actually runs 00:15-01:15
+        // (0.1+0.1+0.1+0.1=0.4), strictly cheaper than either hour-aligned window
+        // (00:00-01:00 = 1.3, 01:00-02:00 = 3.1) — the start must not be snapped to the hour.
+        var start = new DateTimeOffset(2026, 1, 15, 0, 0, 0, TimeSpan.Zero);
+        var quarterPrices = new[] { 1.0m, 0.1m, 0.1m, 0.1m, 0.1m, 1.0m, 1.0m, 1.0m };
+        var prices = quarterPrices
+            .Select((price, i) => (start.AddMinutes(i * 15), price))
+            .ToList();
+
+        var results = CheapestPeriodCalculator.FindCheapestPeriods(prices, [1]);
+
+        Assert.Single(results);
+        Assert.Equal(start.AddMinutes(15), results[0].StartAtUtc);
+        Assert.Equal(0.1m, results[0].AveragePriceDkkPerKwh);
+    }
+
+    [Fact]
+    public void FindCheapestPeriods_QuarterHourlyResolution_MissingSampleBreaksContiguity()
+    {
         var start = new DateTimeOffset(2026, 1, 15, 0, 0, 0, TimeSpan.Zero);
         var prices = new List<(DateTimeOffset, decimal)>
         {
-            (start, 0.5m),
-            // start.AddMinutes(15) missing
-            (start.AddMinutes(30), 0.5m),
-            (start.AddMinutes(45), 0.5m),
+            (start, 0.1m),
+            (start.AddMinutes(15), 0.1m),
+            // start.AddMinutes(30) missing
+            (start.AddMinutes(45), 0.1m),
             (start.AddHours(1), 0.1m),
         };
 
-        var results = CheapestPeriodCalculator.FindCheapestPeriods(prices, [2]);
+        // A 1-hour window (4 quarter-hours) needs 4 truly contiguous 15-minute points; the gap
+        // means no such run exists anywhere in this 4-point series.
+        var results = CheapestPeriodCalculator.FindCheapestPeriods(prices, [1]);
 
-        Assert.Single(results);
-        Assert.Equal(start, results[0].StartAtUtc);
+        Assert.Empty(results);
     }
 }

@@ -1,4 +1,4 @@
-<MudChart T="double" ChartType="ChartType.Line" ChartSeries="@_series" ChartLabels="@_labels"
+<MudChart T="double" ChartType="ChartType.Timeseries" ChartSeries="@_series"
           ChartOptions="@_options" Width="100%" Height="300px" />
 
 @code {
@@ -6,54 +6,38 @@
     public IReadOnlyList<(DateTimeOffset AtLocal, decimal TotalDkkPerKwh)> Points { get; set; } = [];
 
     private List<ChartSeries<double>> _series = [];
-    private string[] _labels = [];
-    // LineChartOptions (not the plain ChartOptions, which has no axis controls at all): YAxisTicks
-    // sets the step between horizontal gridlines, which MudBlazor 9.9 otherwise defaults to a fixed
-    // 20 regardless of the data's actual range — for DKK/kWh values that are normally well under
-    // 20, that squashes the whole line into an unreadable sliver at the bottom of the chart
-    // (backlog item 10's "garbled" chart bug: the line was technically there, just visually
-    // flattened to near-nothing, with only "0" and "20" as gridlines). YAxisTicks is int-only, so 1
-    // DKK/kWh is the finest step available; still far more legible than the default 20. Palette
-    // matches MainLayout's theme (item 8) — MudBlazor's own default starts with a purple this app
-    // avoids everywhere else.
-    private readonly LineChartOptions _options = new()
+
+    // Timeseries (not the plain Line chart): each point carries its own real DateTime instead of a
+    // parallel string-label array, which fixes two things at once. (1) Hovering a point now shows
+    // its actual date/time in the tooltip (TooltipTitleFormat defaults to "{{X_VALUE}}", formatted
+    // via TooltipTimeLabelFormat below) for every point, not just the ones with a visible axis
+    // label. (2) X-axis label spacing is driven by TimeLabelSpacing (a real TimeSpan) rather than
+    // "every Nth data point", so it no longer needs to guess the source data's resolution to avoid
+    // overlapping into unreadable text (backlog item 10) — it stays correct even though Denmark's
+    // day-ahead prices are now 15-minute resolution instead of hourly. YAxisTicks is still needed:
+    // MudBlazor's Y-axis auto-scale otherwise defaults to a step of 20 regardless of the data's
+    // actual (much smaller) DKK/kWh range. Palette matches MainLayout's theme (item 8).
+    private readonly TimeSeriesChartOptions _options = new()
     {
         ShowLegend = false,
         ChartPalette = ["#03A9F4"],
         YAxisTicks = 1,
         XAxisLabelRotation = -45,
+        TimeLabelSpacing = TimeSpan.FromHours(6),
+        TimeLabelFormat = "HH:mm",
+        TooltipTimeLabelFormat = "ddd HH:mm",
     };
 
     protected override void OnParametersSet()
     {
-        // MudChart renders every label with no auto-thinning — cramming a full "HH:mm" string per
-        // point onto the x-axis overlaps into unreadable, "garbled" text (backlog item 10). Label
-        // roughly every 6 hours, rotated, so consecutive labels don't run into each other. The
-        // stride is derived from the actual point spacing rather than hardcoded, because
-        // Denmark's day-ahead prices moved from hourly to 15-minute resolution — hardcoding "every
-        // 6th point" assuming hourly data would silently go back to labeling every 1.5 hours (4x
-        // too dense) the moment the API's resolution changes again.
-        var pointsPerHour = PointsPerHour();
-        var labelStride = Math.Max(1, pointsPerHour * 6);
-        _labels = Points.Select((p, i) => i % labelStride == 0 ? p.AtLocal.ToString("HH:mm") : "").ToArray();
         _series =
         [
             new ChartSeries<double>
             {
                 Name = "DKK/kWh",
-                Data = Points.Select(p => (double)p.TotalDkkPerKwh).ToArray(),
+                TooltipYValueFormat = "0.0000",
+                Data = Points.Select(p => (p.AtLocal.DateTime, (double)p.TotalDkkPerKwh)).ToList(),
             },
         ];
-    }
-
-    private int PointsPerHour()
-    {
-        if (Points.Count < 2)
-        {
-            return 1;
-        }
-
-        var deltaHours = (Points[1].AtLocal - Points[0].AtLocal).TotalHours;
-        return deltaHours > 0 ? Math.Max(1, (int)Math.Round(1.0 / deltaHours)) : 1;
     }
 }
