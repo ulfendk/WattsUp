@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using WattsUp.Services.Json;
 
 namespace WattsUp.Services.EnergiDataService.Dto;
 
@@ -24,9 +25,11 @@ public sealed class DatahubPricelistRecord
     public string? Description { get; set; }
 
     [JsonPropertyName("ValidFrom")]
+    [JsonConverter(typeof(UtcDateTimeOffsetConverter))]
     public DateTimeOffset ValidFrom { get; set; }
 
     [JsonPropertyName("ValidTo")]
+    [JsonConverter(typeof(NullableUtcDateTimeOffsetConverter))]
     public DateTimeOffset? ValidTo { get; set; }
 
     [JsonPropertyName("VATClass")]

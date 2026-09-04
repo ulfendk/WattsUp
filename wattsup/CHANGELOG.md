@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.2.5 — 2026-09-04
+
+- **Fix (significant): every timestamp from EnergiDataService was silently mis-parsed by up to 2
+  hours whenever the add-on's container time zone wasn't UTC** — which it commonly isn't, since HA
+  add-on containers are typically set to match the Home Assistant instance's own configured time
+  zone (e.g. `Europe/Copenhagen`). Energinet's API sends "UTC" timestamps without an explicit
+  offset/`Z` suffix; .NET's default JSON parsing for such a string assumes the *process's own local
+  time zone*, not UTC. In a container set to Europe/Copenhagen this silently shifted every parsed
+  price and tariff-validity timestamp by 1-2 hours (depending on DST) — including which hour's
+  tariff rate got applied to a given price point on the chart, cheapest-period calculations, and
+  trend comparisons; only the single "current price" MQTT/dashboard figure escaped it (it's
+  computed from the real system clock, not a parsed API timestamp). Added a converter that always
+  treats an offset-less timestamp as UTC, applied to every affected field.
+- The Dashboard's "Current actual price (as of HH:mm)" label (added in 0.2.4) is what surfaced
+  this — verified fixed by reproducing the exact bug (running with the container's time zone set
+  to Europe/Copenhagen) and confirming the displayed time now matches real local time.
+
 ## 0.2.4 — 2026-09-04
 
 - The Dashboard's price card now shows the actual price period's start time ("Current actual

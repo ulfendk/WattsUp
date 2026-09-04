@@ -78,10 +78,16 @@ public sealed class Period
 
 public sealed class TimeInterval
 {
+    // Defensive: Eloverblik's CIM-flavoured API is expected to always include an explicit "Z"/offset
+    // (unlike EnergiDataService's day-ahead/tariff feeds), so this converter should be a no-op here
+    // — but applying it costs nothing and guards against the same silent container-time-zone-
+    // dependent mis-parse if that ever turns out not to hold.
     [JsonPropertyName("start")]
+    [JsonConverter(typeof(WattsUp.Services.Json.UtcDateTimeOffsetConverter))]
     public DateTimeOffset Start { get; set; }
 
     [JsonPropertyName("end")]
+    [JsonConverter(typeof(WattsUp.Services.Json.UtcDateTimeOffsetConverter))]
     public DateTimeOffset End { get; set; }
 }
 
