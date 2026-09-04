@@ -221,6 +221,15 @@ public sealed class MqttPublisherService : BackgroundService, IMqttPublisherServ
                 MqttDiscoveryPayloadBuilder.CheapestPeriodStateTopic(result.DurationHours),
                 result.StartAtUtc.ToString("O"),
                 retain: false);
+            await PublishAsync(
+                MqttDiscoveryPayloadBuilder.CheapestPeriodAttributesTopic(result.DurationHours),
+                MqttDiscoveryPayloadBuilder.Serialize(new
+                {
+                    average_price_dkk_per_kwh = result.AveragePriceDkkPerKwh,
+                    duration_hours = result.DurationHours,
+                    ends_at_utc = result.StartAtUtc.AddHours(result.DurationHours).ToString("O"),
+                }),
+                retain: false);
         }
     }
 

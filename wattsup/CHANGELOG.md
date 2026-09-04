@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.3 — 2026-09-04
+
+- Fix: the `sensor.wattsup_cheapest_start_<n>h` entities' icon never showed in Home Assistant —
+  `mdi:clock-start-outline` isn't a real Material Design Icon (only the filled `mdi:clock-start`
+  is), so it silently rendered nothing.
+- Those sensors now publish attributes: `average_price_dkk_per_kwh`, `duration_hours`, and
+  `ends_at_utc`, matching the pattern the price/diagnostics sensors already use.
+
 ## 0.2.2 — 2026-09-04
 
 - Fix: cheapest-period windows were snapped to hour boundaries even though Danish day-ahead

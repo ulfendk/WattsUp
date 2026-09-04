@@ -31,6 +31,11 @@ whichever single price area is currently tracked — switching areas removes the
 - **Attributes**: the full cost breakdown, whether the reduced elafgift rate is in effect, and
   whether every input resolved from live data or fell back to a cached/seeded value.
 
+Six `sensor.wattsup_cheapest_start_<n>h` entities (n = 1–6) publish the start time of the cheapest
+contiguous window of that many hours, over whatever price data is cached — the state is a
+timestamp (usable directly in automations), with `average_price_dkk_per_kwh`,
+`duration_hours`, and `ends_at_utc` as attributes.
+
 A `sensor.wattsup_diagnostics` entity reports poller staleness and which MQTT broker source is
 active. Subscription-style fees (grid "abo" line items, your supplier's monthly fee) are shown in
 the UI but are never added to the published per-kWh price.
