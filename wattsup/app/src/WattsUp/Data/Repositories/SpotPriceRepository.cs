@@ -34,11 +34,17 @@ public sealed class SpotPriceRepository(ISqliteConnectionFactory connectionFacto
                 time_dk = excluded.time_dk,
                 price_dkk_per_kwh = excluded.price_dkk_per_kwh;
             """,
+            // Normalize to a true UTC (+00:00, not "Z" — matching every other DateTimeOffset.ToString("O")
+            // in this codebase) offset before serializing, regardless of what offset the input
+            // carries — time_utc is part of the primary key, so any drift in its string form (e.g.
+            // a future parsing change, or DateTime's "Z" suffix vs DateTimeOffset's "+00:00") would
+            // silently duplicate rows instead of overwriting them, the way a pre-0.2.5 upgrade did
+            // (see migration 003). ToUniversalTime() keeps this a DateTimeOffset, not a DateTime.
             prices.Select(p => new
             {
                 p.PriceArea,
-                TimeUtc = p.TimeUtc.ToString("O"),
-                TimeDk = p.TimeDk.ToString("O"),
+                TimeUtc = p.TimeUtc.ToUniversalTime().ToString("O"),
+                TimeDk = p.TimeDk.ToUniversalTime().ToString("O"),
                 p.PriceDkkPerKwh,
             }),
             transaction);

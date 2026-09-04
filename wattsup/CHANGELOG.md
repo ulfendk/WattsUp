@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.2.6 — 2026-09-04
+
+- **Fix: 0.2.5 itself introduced a regression that undermined its own fix.** It corrected how
+  timestamps get parsed, but that changed the exact text format used as part of `spot_prices`' and
+  `tariff_line_items`' primary keys — so on upgrade, rows written *before* 0.2.5 (with the old,
+  wrong offset baked into that key) weren't recognized as stale and replaced; new, correctly-parsed
+  rows were just added alongside them instead. The leftover duplicates corrupted every time-range
+  query: the "current price" timestamp could still show the old wrong time, the hourly chart
+  crisscrossed itself, and cheapest-period windows longer than an hour or two mostly failed to find
+  a contiguous run. A new migration clears both caches outright on upgrade (they're pure caches,
+  repopulated automatically within moments) so this can't linger. Also hardened the write path
+  itself to always normalize to a true UTC offset before storing, so a similar mismatch can't
+  recur even from some other future change.
+- Verified this time by actually reproducing the reported bug — seeding a database with the exact
+  kind of leftover duplicate rows an in-place 0.2.4→0.2.5 upgrade would produce, confirming all
+  three symptoms (wrong "as of" time, missing cheapest-period durations, garbled chart), then
+  confirming the migration resolves all three together.
+
 ## 0.2.5 — 2026-09-04
 
 - **Fix (significant): every timestamp from EnergiDataService was silently mis-parsed by up to 2
