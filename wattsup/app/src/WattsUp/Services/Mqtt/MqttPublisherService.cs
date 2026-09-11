@@ -194,6 +194,7 @@ public sealed class MqttPublisherService : BackgroundService, IMqttPublisherServ
         fully_resolved = b.FullyResolved,
         as_of_utc = b.AtUtc.ToString("O"),
         price_period_start_utc = b.PricePeriodStartUtc?.ToString("O"),
+        price_period_stale = b.SpotPricePeriodStale,
     };
 
     /// <summary>Backlog item 7: publishes the cheapest 1–6 hour contiguous window's start time,

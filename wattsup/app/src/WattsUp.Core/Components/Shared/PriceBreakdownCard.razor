@@ -21,6 +21,14 @@
         </CardHeaderActions>
     </MudCardHeader>
     <MudCardContent>
+        @if (Breakdown.SpotPricePeriodStale)
+        {
+            <MudAlert Severity="Severity.Warning" Dense="true" Class="mb-2">
+                Spot prices haven't updated for the current 15-minute period yet — the price below is
+                for @(ToLocal(Breakdown.PricePeriodStartUtc!.Value).ToString("HH:mm", CultureInfo.CurrentCulture)),
+                not right now. See Diagnostics for poller status.
+            </MudAlert>
+        }
         <MudText Typo="Typo.h3" Class="mb-1">
             @Fmt(Breakdown.TotalDkkPerKwh) <MudText Typo="Typo.subtitle1" Class="d-inline">DKK/kWh@(Breakdown.VatEnabled ? " incl. VAT" : "")</MudText>
         </MudText>

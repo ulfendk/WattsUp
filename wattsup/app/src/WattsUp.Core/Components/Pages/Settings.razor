@@ -8,6 +8,7 @@
 @inject WattsUp.Services.Mqtt.IMqttPublisherService MqttPublisherService
 @inject WattsUp.Services.IRuntimeInfo RuntimeInfo
 @inject ISnackbar Snackbar
+@inject NavigationManager NavigationManager
 
 <PageTitle>WattsUp — Settings</PageTitle>
 
@@ -302,6 +303,12 @@ else
             await ConsumptionDeviceRepository.SetSelectedAsync(_selectedConsumptionDevices);
 
             Snackbar.Add("Settings saved.", Severity.Success);
+
+            // Saving is the natural "I'm done configuring" signal — land the visitor on the page
+            // they actually came here for instead of leaving them stranded on the settings form.
+            // MudSnackbar lives in MainLayout (outside this page), so the toast above survives the
+            // navigation away from here.
+            NavigationManager.NavigateTo("");
         }
         finally
         {

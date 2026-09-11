@@ -107,4 +107,42 @@ public class PriceCalculationServiceTests
         Assert.Equal(now, breakdown.AtUtc);
         Assert.Equal(periodStart, breakdown.PricePeriodStartUtc);
     }
+
+    [Fact]
+    public void Calculate_PricePeriodWithinWindow_NotStale()
+    {
+        var tariffs = new TariffResolution(0m, true, 0.072m, true, 0.043m, true, 0.008m, false, false);
+        var periodStart = new DateTimeOffset(2026, 1, 15, 11, 0, 0, TimeSpan.Zero);
+
+        // 14 minutes into a still-current 15-minute period.
+        var breakdown = PriceCalculationService.Calculate(
+            "DK1", periodStart.AddMinutes(14), 0.450m, true, tariffs, 0m, vatEnabled: true, periodStart);
+
+        Assert.False(breakdown.SpotPricePeriodStale);
+    }
+
+    [Fact]
+    public void Calculate_PricePeriodEndedExactlyOnBoundary_IsStale()
+    {
+        var tariffs = new TariffResolution(0m, true, 0.072m, true, 0.043m, true, 0.008m, false, false);
+        var periodStart = new DateTimeOffset(2026, 1, 15, 11, 0, 0, TimeSpan.Zero);
+
+        // Exactly 15 minutes on: the period has ended, but no newer one was resolved — a gap.
+        var breakdown = PriceCalculationService.Calculate(
+            "DK1", periodStart.AddMinutes(15), 0.450m, true, tariffs, 0m, vatEnabled: true, periodStart);
+
+        Assert.True(breakdown.SpotPricePeriodStale);
+    }
+
+    [Fact]
+    public void Calculate_NoSpotPriceResolved_NeverStaleRegardlessOfPeriod()
+    {
+        var tariffs = new TariffResolution(0m, true, 0.072m, true, 0.043m, true, 0.008m, false, false);
+        var periodStart = new DateTimeOffset(2026, 1, 15, 11, 0, 0, TimeSpan.Zero);
+
+        var breakdown = PriceCalculationService.Calculate(
+            "DK1", periodStart.AddHours(3), 0m, spotPriceResolved: false, tariffs, 0m, vatEnabled: true, periodStart);
+
+        Assert.False(breakdown.SpotPricePeriodStale);
+    }
 }

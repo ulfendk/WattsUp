@@ -42,4 +42,16 @@ public sealed record PriceBreakdown
 
     /// <summary>True if every input was resolved from live/cached data rather than a fallback constant.</summary>
     public bool FullyResolved => SpotPriceResolved && GridTariffResolved && NationwideChargesResolved;
+
+    /// <summary>Denmark's day-ahead market publishes 15-minute settlement periods — the length used
+    /// by <see cref="SpotPricePeriodStale"/> below to detect a resolved price that has "slid out of
+    /// window".</summary>
+    public static readonly TimeSpan SpotPricePeriodLength = TimeSpan.FromMinutes(15);
+
+    /// <summary>True when a spot price did resolve, but its settlement period has already ended by
+    /// <see cref="AtUtc"/> — i.e. <see cref="WattsUp.Data.Repositories.ISpotPriceRepository.GetCurrentAsync"/>
+    /// fell back to the last period with any data because the current one hasn't been
+    /// polled/published yet. The value shown is a real, recent price, just not actually "now"'s.</summary>
+    public bool SpotPricePeriodStale =>
+        SpotPriceResolved && PricePeriodStartUtc is { } periodStart && AtUtc >= periodStart + SpotPricePeriodLength;
 }
