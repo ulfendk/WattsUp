@@ -1,5 +1,12 @@
+@using WattsUp.Services
+@inject IRuntimeInfo RuntimeInfo
+
 <MudNavMenu>
     <MudNavLink Href="" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Dashboard">Dashboard</MudNavLink>
     <MudNavLink Href="settings" Icon="@Icons.Material.Filled.Settings">Settings</MudNavLink>
     <MudNavLink Href="diagnostics" Icon="@Icons.Material.Filled.MonitorHeart">Diagnostics</MudNavLink>
+    @if (RuntimeInfo.IsBrowserHosted)
+    {
+        <MudNavLink Href="secrets" Icon="@Icons.Material.Filled.Key">Secrets</MudNavLink>
+    }
 </MudNavMenu>

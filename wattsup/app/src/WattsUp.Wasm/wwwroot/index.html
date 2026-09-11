@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- GitHub Pages project-site hosting: https://ulfendk.github.io/WattsUp/ — must match
+         manifest.webmanifest's start_url/scope exactly, or the installed PWA won't launch right. -->
+    <base href="/WattsUp/" />
+    <title>WattsUp — public demo</title>
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="icons/icon-192.png" />
+    <link rel="icon" type="image/png" href="icons/icon-192.png" />
+    <link rel="stylesheet" href="_content/WattsUp.Core/css/app.css" />
+    <link rel="stylesheet" href="_content/MudBlazor/MudBlazor.min.css" />
+    <link rel="stylesheet" href="WattsUp.Wasm.styles.css" />
+</head>
+
+<body>
+    <div id="app">
+        <div class="loading-shell">Loading WattsUp…</div>
+    </div>
+
+    <div id="blazor-error-ui">
+        An unhandled error has occurred.
+        <a href="" class="reload">Reload</a>
+        <a class="dismiss">🗙</a>
+    </div>
+
+    <script src="_content/WattsUp.Core/theme.js"></script>
+    <script src="indexedDbInterop.js"></script>
+    <script src="secretsInterop.js"></script>
+    <script src="_content/MudBlazor/MudBlazor.min.js"></script>
+    <script src="_framework/blazor.webassembly.js"></script>
+</body>
+
+</html>

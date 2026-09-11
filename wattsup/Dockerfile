@@ -17,6 +17,7 @@ WORKDIR /src
 # identifier, so this deliberately does NOT pass --arch/-r - the base image below is what fixes
 # the architecture.
 COPY app/src/WattsUp/ WattsUp/
+COPY app/src/WattsUp.Core/ WattsUp.Core/
 RUN dotnet publish WattsUp/WattsUp.csproj \
     -c Release \
     -o /app/publish

@@ -6,6 +6,7 @@
 @inject WattsUp.Services.Homeassistant.IHomeAssistantApiClient HomeAssistantApiClient
 @inject IConsumptionDeviceRepository ConsumptionDeviceRepository
 @inject WattsUp.Services.Mqtt.IMqttPublisherService MqttPublisherService
+@inject WattsUp.Services.IRuntimeInfo RuntimeInfo
 @inject ISnackbar Snackbar
 
 <PageTitle>WattsUp — Settings</PageTitle>
@@ -62,13 +63,27 @@ else
         <MudText Typo="Typo.h6" Class="mb-2">Eloverblik metering point</MudText>
         @if (!EloverblikClient.IsConfigured)
         {
-            <MudAlert Severity="Severity.Info">
-                No Eloverblik refresh token configured. Set one under the add-on's own Configuration tab in Home Assistant
-                (a restart is required for secrets) — until then, electric heating always uses the normal elafgift rate.
-            </MudAlert>
+            @if (RuntimeInfo.IsBrowserHosted)
+            {
+                <MudAlert Severity="Severity.Info">
+                    No Eloverblik refresh token configured. Enter one on the <MudLink Href="secrets">Secrets</MudLink> page
+                    — it's saved only in this browser — until then, electric heating always uses the normal elafgift rate.
+                </MudAlert>
+            }
+            else
+            {
+                <MudAlert Severity="Severity.Info">
+                    No Eloverblik refresh token configured. Set one under the add-on's own Configuration tab in Home Assistant
+                    (a restart is required for secrets) — until then, electric heating always uses the normal elafgift rate.
+                </MudAlert>
+            }
         }
         else
         {
+            @if (_meteringPointsError is not null)
+            {
+                <MudAlert Severity="Severity.Warning" Class="mb-2">@_meteringPointsError</MudAlert>
+            }
             <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-2">
                 <MudButton Variant="Variant.Outlined" OnClick="LoadMeteringPointsAsync" Disabled="@_loadingMeteringPoints">
                     @(_meteringPoints.Count == 0 ? "Load metering points" : "Refresh list")
@@ -136,6 +151,7 @@ else
     private bool _loadingGridCompanies;
     private bool _loadingMeteringPoints;
     private bool _loadingConsumptionDevices;
+    private string? _meteringPointsError;
 
     private string _selectedPriceArea = "DK1";
     private string? _gridCompanyGln;
@@ -195,12 +211,24 @@ else
     private async Task LoadMeteringPointsAsync()
     {
         _loadingMeteringPoints = true;
+        _meteringPointsError = null;
         try
         {
             var points = await EloverblikClient.GetMeteringPointsAsync();
             await MeteringPointRepository.UpsertManyAsync(
                 points.Select(p => new MeteringPoint(p.Gsrn, p.TypeOfMp, p.Address, false)));
             _meteringPoints = (await MeteringPointRepository.GetAllAsync()).ToList();
+        }
+        catch (Exception) when (RuntimeInfo.IsBrowserHosted)
+        {
+            // On the public WASM build this call goes straight from the visitor's browser to
+            // eloverblik.dk, which may not allow that (CORS is entirely eloverblik.dk's call, not
+            // ours) — surface a clear message instead of an unhandled exception. The Server/add-on
+            // build calls Eloverblik from the container instead, where this never applies, so it
+            // still lets a real failure there propagate as before.
+            _meteringPointsError =
+                "Could not reach Eloverblik from your browser — it may not allow direct browser requests. " +
+                "This feature may not work in the public demo.";
         }
         finally
         {

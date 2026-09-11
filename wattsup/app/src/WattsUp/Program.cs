@@ -7,6 +7,7 @@ using WattsUp.Components;
 using WattsUp.Data;
 using WattsUp.Data.Repositories;
 using WattsUp.Middleware;
+using WattsUp.Services;
 using WattsUp.Services.Diagnostics;
 using WattsUp.Services.Consumption;
 using WattsUp.Services.Eloverblik;
@@ -47,6 +48,10 @@ builder.Services.AddSingleton<IElafgiftAllowanceRepository, ElafgiftAllowanceRep
 
 // --- Diagnostics ---
 builder.Services.AddSingleton<DiagnosticsStatusService>();
+
+// --- Host identity (lets shared UI tell this apart from the public WASM build) ---
+builder.Services.AddSingleton<IRuntimeInfo, ServerRuntimeInfo>();
+builder.Services.AddScoped<IThemePreferenceStore, ProtectedLocalStorageThemePreferenceStore>();
 
 // --- Domain services ---
 builder.Services.AddSingleton<ISettingsService, SettingsService>();

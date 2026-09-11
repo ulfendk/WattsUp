@@ -6,6 +6,14 @@ on:
     tags: ["v*"]
   pull_request:
     branches: [main]
+  schedule:
+    # Refreshes the public demo's price/tariff snapshot (deploy-pages below) — the demo has no
+    # server able to poll api.energidataservice.dk itself, see fetch_price_snapshot.py. Every 6h is
+    # plenty: next-day spot prices publish once daily, and tariffs change rarely.
+    - cron: "0 */6 * * *"
+  # Lets deploy-pages be triggered manually for any branch/ref (e.g. `gh workflow run build.yml
+  # --ref <branch>`) — handy to preview the public demo before it's merged to main.
+  workflow_dispatch:
 
 jobs:
   test:
@@ -49,3 +57,45 @@ jobs:
           tags: |
             ${{ steps.image.outputs.repo }}:${{ steps.version.outputs.value }}
             ${{ steps.image.outputs.repo }}:latest
+
+  # Public browser-only demo (WattsUp.Wasm — no Home Assistant integration, see its Program.cs),
+  # built from the same repo and deployed to GitHub Pages. Tracks main directly, unlike the
+  # tag-gated add-on image above: this isn't part of the add-on's release cadence, so there's no
+  # reason to hold it back for a version tag. Also runs on the schedule trigger above, purely to
+  # refresh the price/tariff snapshot — that's the only thing that changes between runs when no
+  # code changed. One-time manual step this workflow can't do for you: in the repo's
+  # Settings → Pages → Build and deployment → Source, switch it to "GitHub Actions" — deploy-pages
+  # fails on its first run otherwise.
+  deploy-pages:
+    needs: test
+    if: (github.ref == 'refs/heads/main' && github.event_name == 'push') || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+      # Without this, publish falls back to an unoptimized/interpreted build (the SDK warns about
+      # this itself) — confirmed locally that parsing the ~1.7MB tariff-line-items.json snapshot
+      # takes noticeably long on first load in that mode. AOT/trimming via wasm-tools fixes it.
+      - run: dotnet workload install wasm-tools
+      # Overwrites the committed wwwroot/data/*.json baseline with a fresh snapshot before
+      # publishing — api.energidataservice.dk has no CORS support (confirmed, not assumed), so the
+      # WASM app can't fetch it live from a visitor's browser; see StaticSnapshotEnergiDataServiceClient.
+      - run: python3 .github/scripts/fetch_price_snapshot.py --out-dir wattsup/app/src/WattsUp.Wasm/wwwroot/data
+      - run: dotnet publish wattsup/app/src/WattsUp.Wasm/WattsUp.Wasm.csproj -c Release -o publish-output
+      # Belt-and-suspenders alongside the committed wwwroot/.nojekyll — GitHub Pages runs Jekyll by
+      # default, which silently drops any "_"-prefixed folder, fatal for Blazor's _framework/.
+      - run: touch publish-output/wwwroot/.nojekyll
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: publish-output/wwwroot
+      - id: deployment
+        uses: actions/deploy-pages@v4
