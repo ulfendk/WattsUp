@@ -52,6 +52,7 @@ builder.Services.AddSingleton<DiagnosticsStatusService>();
 // --- Host identity (lets shared UI tell this apart from the public WASM build) ---
 builder.Services.AddSingleton<IRuntimeInfo, ServerRuntimeInfo>();
 builder.Services.AddScoped<IThemePreferenceStore, ProtectedLocalStorageThemePreferenceStore>();
+builder.Services.AddSingleton<IPwaInstallService, NullPwaInstallService>();
 
 // --- Domain services ---
 builder.Services.AddSingleton<ISettingsService, SettingsService>();
@@ -91,10 +92,17 @@ builder.Services.AddSingleton<MqttPublisherService>();
 builder.Services.AddSingleton<IMqttPublisherService>(sp => sp.GetRequiredService<MqttPublisherService>());
 builder.Services.AddHostedService(sp => sp.GetRequiredService<MqttPublisherService>());
 
-// --- Background pollers ---
-builder.Services.AddHostedService<SpotPricePollingService>();
-builder.Services.AddHostedService<TariffPollingService>();
-builder.Services.AddHostedService<EloverblikConsumptionPollingService>();
+// --- Background pollers. Registered as their own singleton (not just AddHostedService<T>, which
+// only exposes them via the IHostedService collection) so IDataRefreshCoordinator can call
+// PollOnceAsync() on the very same instances the loop runs on — see the WASM build's manual
+// "Refresh" button; harmless but currently unused from this host's own UI. ---
+builder.Services.AddSingleton<SpotPricePollingService>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<SpotPricePollingService>());
+builder.Services.AddSingleton<TariffPollingService>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<TariffPollingService>());
+builder.Services.AddSingleton<EloverblikConsumptionPollingService>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<EloverblikConsumptionPollingService>());
+builder.Services.AddSingleton<IDataRefreshCoordinator, DataRefreshCoordinator>();
 builder.Services.AddHostedService<DeviceConsumptionPollingService>();
 
 // --- Client-locale number formatting (backlog item 6) ---

@@ -1,10 +1,15 @@
 @inherits LayoutComponentBase
 @using MudBlazor.Services
+@using WattsUp.BackgroundServices
 @using WattsUp.Services
 @implements IAsyncDisposable
 @inject IBrowserViewportService BrowserViewportService
 @inject IJSRuntime JsRuntime
 @inject IThemePreferenceStore ThemePreferenceStore
+@inject IRuntimeInfo RuntimeInfo
+@inject IPwaInstallService PwaInstallService
+@inject IDataRefreshCoordinator DataRefreshCoordinator
+@inject ISnackbar Snackbar
 
 <MudThemeProvider Theme="_theme" @bind-IsDarkMode="_isDarkMode" />
 <MudPopoverProvider />
@@ -16,6 +21,19 @@
         <MudIcon Icon="@Icons.Material.Filled.Bolt" Class="mr-2" />
         <MudText Typo="Typo.h6">WattsUp</MudText>
         <MudSpacer />
+        @if (RuntimeInfo.IsBrowserHosted)
+        {
+            <MudTooltip Text="Refresh prices, tariffs &amp; consumption now">
+                <MudIconButton Icon="@Icons.Material.Filled.Refresh" Color="Color.Inherit"
+                                OnClick="@RefreshDataAsync" Disabled="@_refreshing" />
+            </MudTooltip>
+        }
+        @if (_installAvailable)
+        {
+            <MudTooltip Text="Install WattsUp as an app">
+                <MudIconButton Icon="@Icons.Material.Filled.InstallMobile" Color="Color.Inherit" OnClick="@PromptInstallAsync" />
+            </MudTooltip>
+        }
         <MudIconButton Icon="@(_isDarkMode ? Icons.Material.Filled.LightMode : Icons.Material.Filled.DarkMode)"
                         Color="Color.Inherit" OnClick="@ToggleDarkModeAsync" />
     </MudAppBar>
@@ -67,8 +85,18 @@
     // survives container restarts/upgrades); the WASM host backs it with plain localStorage.
     private bool _isDarkMode;
 
-    protected override async Task OnInitializedAsync() =>
+    // "Install app" button state — mirrors IPwaInstallService.IsInstallAvailable, which is false
+    // (and stays false) for the whole lifetime of the Server/add-on build's NullPwaInstallService.
+    private bool _installAvailable;
+
+    // Manual refresh (WASM build only — see the RuntimeInfo.IsBrowserHosted guard above).
+    private bool _refreshing;
+
+    protected override async Task OnInitializedAsync()
+    {
         await BrowserViewportService.SubscribeAsync(_viewportSubscriptionId, OnResizedAsync, new ResizeOptions(), fireImmediately: true);
+        PwaInstallService.AvailabilityChanged += OnInstallAvailabilityChanged;
+    }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -78,7 +106,38 @@
         }
 
         _isDarkMode = await ThemePreferenceStore.TryGetDarkModeAsync() ?? await JsRuntime.InvokeAsync<bool>("themeInterop.prefersDark");
+        await PwaInstallService.InitializeAsync();
+        _installAvailable = PwaInstallService.IsInstallAvailable;
         StateHasChanged();
+    }
+
+    private void OnInstallAvailabilityChanged() => InvokeAsync(() =>
+    {
+        _installAvailable = PwaInstallService.IsInstallAvailable;
+        StateHasChanged();
+    });
+
+    private async Task PromptInstallAsync() => await PwaInstallService.PromptInstallAsync();
+
+    private async Task RefreshDataAsync()
+    {
+        _refreshing = true;
+        try
+        {
+            await DataRefreshCoordinator.RefreshNowAsync();
+            Snackbar.Add("Data refreshed.", Severity.Success);
+        }
+        catch (Exception)
+        {
+            // Each poller already reports its own failure to DiagnosticsStatusService and keeps
+            // last-known-good cached data — this only catches something outside that (e.g. an
+            // IndexedDB hiccup), so a generic message is enough; see Diagnostics for specifics.
+            Snackbar.Add("Refresh failed — check the Diagnostics page for details.", Severity.Warning);
+        }
+        finally
+        {
+            _refreshing = false;
+        }
     }
 
     private async Task ToggleDarkModeAsync()
@@ -98,5 +157,9 @@
 
     private void ToggleDrawer() => _drawerOpen = !_drawerOpen;
 
-    public async ValueTask DisposeAsync() => await BrowserViewportService.UnsubscribeAsync(_viewportSubscriptionId);
+    public async ValueTask DisposeAsync()
+    {
+        PwaInstallService.AvailabilityChanged -= OnInstallAvailabilityChanged;
+        await BrowserViewportService.UnsubscribeAsync(_viewportSubscriptionId);
+    }
 }

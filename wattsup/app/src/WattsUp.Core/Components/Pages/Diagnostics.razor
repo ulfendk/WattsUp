@@ -3,6 +3,7 @@
 @inject WattsUp.Services.Mqtt.IMqttBrokerResolver MqttBrokerResolver
 @inject WattsUp.Services.Eloverblik.IEloverblikClient EloverblikClient
 @inject AddonOptions AddonOptions
+@inject WattsUp.Services.IRuntimeInfo RuntimeInfo
 
 <PageTitle>WattsUp — Diagnostics</PageTitle>
 
@@ -33,10 +34,15 @@
     <MudText Typo="Typo.h6" Class="mb-2">Connections</MudText>
     <MudSimpleTable Dense="true">
         <tbody>
-            <tr>
-                <td>MQTT broker</td>
-                <td>@(_mqttBroker is null ? "Not connected — no manual override and no Supervisor MQTT service found" : $"{_mqttBroker.Host}:{_mqttBroker.Port} (source: {_mqttBroker.Source})")</td>
-            </tr>
+            @if (!RuntimeInfo.IsBrowserHosted)
+            {
+                <!-- MQTT is a Home Assistant add-on concern — there's no broker for a browser tab
+                     to ever reach, so this row is entirely irrelevant to the WASM build. -->
+                <tr>
+                    <td>MQTT broker</td>
+                    <td>@(_mqttBroker is null ? "Not connected — no manual override and no Supervisor MQTT service found" : $"{_mqttBroker.Host}:{_mqttBroker.Port} (source: {_mqttBroker.Source})")</td>
+                </tr>
+            }
             <tr>
                 <td>Eloverblik</td>
                 <td>@(EloverblikClient.IsConfigured ? "Refresh token configured" : "Not configured — electric heating always uses the normal elafgift rate")</td>

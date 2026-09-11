@@ -29,7 +29,10 @@ public sealed class TariffPollingService(
         }
     }
 
-    private async Task PollOnceAsync(CancellationToken ct)
+    /// <summary>Runs one poll cycle immediately. Internal to the loop above, but also called
+    /// directly by <see cref="IDataRefreshCoordinator"/> for the WASM build's manual refresh
+    /// button — a visitor shouldn't have to wait for the next scheduled poll.</summary>
+    public async Task PollOnceAsync(CancellationToken ct)
     {
         using var scope = scopeFactory.CreateScope();
         var settingsRepository = scope.ServiceProvider.GetRequiredService<ISettingsRepository>();

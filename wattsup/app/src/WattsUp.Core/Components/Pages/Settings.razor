@@ -113,34 +113,40 @@ else
         }
     </MudPaper>
 
-    <MudPaper Class="pa-4 mb-4" Outlined="true">
-        <MudText Typo="Typo.h6" Class="mb-2">Consumption devices</MudText>
-        @if (!HomeAssistantApiClient.IsAvailable)
-        {
-            <MudAlert Severity="Severity.Info">
-                Home Assistant's Core API isn't reachable from here (no SUPERVISOR_TOKEN) — this only works
-                when WattsUp is running as an installed add-on.
-            </MudAlert>
-        }
-        else
-        {
-            <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-2">
-                <MudButton Variant="Variant.Outlined" OnClick="LoadConsumptionDevicesAsync" Disabled="@_loadingConsumptionDevices">
-                    @(_consumptionDevices.Count == 0 ? "Load devices" : "Refresh list")
-                </MudButton>
-                @if (_loadingConsumptionDevices)
-                {
-                    <MudProgressCircular Size="Size.Small" Indeterminate="true" />
-                }
-            </MudStack>
-            <MudSelect T="string" Label="Tracked devices" MultiSelection="true" @bind-SelectedValues="_selectedConsumptionDevices">
-                @foreach (var device in _consumptionDevices)
-                {
-                    <MudSelectItem T="string" Value="@device.EntityId">@(device.FriendlyName ?? device.EntityId)</MudSelectItem>
-                }
-            </MudSelect>
-        }
-    </MudPaper>
+    @if (!RuntimeInfo.IsBrowserHosted)
+    {
+        <!-- Requires Home Assistant's Core API (SUPERVISOR_TOKEN), which a browser tab can never
+             reach — entirely irrelevant to the WASM build, not just currently unconfigured, so
+             hidden outright rather than shown with an explanatory alert. -->
+        <MudPaper Class="pa-4 mb-4" Outlined="true">
+            <MudText Typo="Typo.h6" Class="mb-2">Consumption devices</MudText>
+            @if (!HomeAssistantApiClient.IsAvailable)
+            {
+                <MudAlert Severity="Severity.Info">
+                    Home Assistant's Core API isn't reachable from here (no SUPERVISOR_TOKEN) — this only works
+                    when WattsUp is running as an installed add-on.
+                </MudAlert>
+            }
+            else
+            {
+                <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-2">
+                    <MudButton Variant="Variant.Outlined" OnClick="LoadConsumptionDevicesAsync" Disabled="@_loadingConsumptionDevices">
+                        @(_consumptionDevices.Count == 0 ? "Load devices" : "Refresh list")
+                    </MudButton>
+                    @if (_loadingConsumptionDevices)
+                    {
+                        <MudProgressCircular Size="Size.Small" Indeterminate="true" />
+                    }
+                </MudStack>
+                <MudSelect T="string" Label="Tracked devices" MultiSelection="true" @bind-SelectedValues="_selectedConsumptionDevices">
+                    @foreach (var device in _consumptionDevices)
+                    {
+                        <MudSelectItem T="string" Value="@device.EntityId">@(device.FriendlyName ?? device.EntityId)</MudSelectItem>
+                    }
+                </MudSelect>
+            }
+        </MudPaper>
+    }
 
     <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SaveAsync" Disabled="@_saving">Save</MudButton>
 }

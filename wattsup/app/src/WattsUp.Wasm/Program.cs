@@ -33,6 +33,7 @@ builder.Services.AddSingleton(addonOptions);
 // --- Host identity + browser-backed cross-cutting concerns ---
 builder.Services.AddSingleton<IRuntimeInfo, BrowserRuntimeInfo>();
 builder.Services.AddSingleton<IThemePreferenceStore, BrowserLocalStorageThemePreferenceStore>();
+builder.Services.AddSingleton<IPwaInstallService, BrowserPwaInstallService>();
 
 // --- Data layer: IndexedDB instead of SQLite (Microsoft.Data.Sqlite is native, WASM can't load it) ---
 builder.Services.AddSingleton<ISpotPriceRepository, IndexedDbSpotPriceRepository>();
@@ -78,10 +79,17 @@ builder.Services.AddHttpClient<IEloverblikClient, EloverblikClient>(client =>
     client.Timeout = TimeSpan.FromSeconds(30);
 }).AddStandardResilienceHandler();
 
-// --- Background pollers (no MQTT republish, no device polling — see the Null* stubs above) ---
-builder.Services.AddHostedService<SpotPricePollingService>();
-builder.Services.AddHostedService<TariffPollingService>();
-builder.Services.AddHostedService<EloverblikConsumptionPollingService>();
+// --- Background pollers (no MQTT republish, no device polling — see the Null* stubs above).
+// Registered as their own singleton (not just AddHostedService<T>, which only exposes them via
+// the IHostedService collection) so IDataRefreshCoordinator below can call PollOnceAsync() on the
+// very same instances the loop runs on, for the manual "Refresh" button. ---
+builder.Services.AddSingleton<SpotPricePollingService>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<SpotPricePollingService>());
+builder.Services.AddSingleton<TariffPollingService>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<TariffPollingService>());
+builder.Services.AddSingleton<EloverblikConsumptionPollingService>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<EloverblikConsumptionPollingService>());
+builder.Services.AddSingleton<IDataRefreshCoordinator, DataRefreshCoordinator>();
 
 // --- Web UI ---
 builder.Services.AddMudServices();

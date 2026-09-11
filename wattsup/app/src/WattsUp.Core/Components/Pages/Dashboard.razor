@@ -1,10 +1,15 @@
 @page "/"
 @implements IDisposable
+@using WattsUp.BackgroundServices
+@using WattsUp.Services
 @inject ISettingsService SettingsService
 @inject IPriceCalculationService PriceCalculationService
 @inject IPriceTrendService PriceTrendService
 @inject ISpotPriceRepository SpotPriceRepository
 @inject DiagnosticsStatusService DiagnosticsStatus
+@inject IDataRefreshCoordinator DataRefreshCoordinator
+@inject IRuntimeInfo RuntimeInfo
+@inject NavigationManager NavigationManager
 
 <PageTitle>WattsUp — Dashboard</PageTitle>
 
@@ -67,6 +72,21 @@ else
 
     protected override async Task OnInitializedAsync()
     {
+        if (RuntimeInfo.IsBrowserHosted)
+        {
+            var settings = await SettingsService.GetAsync();
+            if (string.IsNullOrWhiteSpace(settings.GridCompanyGln))
+            {
+                // First-ever visit to the public demo (or Settings was never completed) — force
+                // the visitor there instead of showing an empty/wrong-region dashboard. PriceArea
+                // alone can't detect this: it defaults to "DK1" even though nobody has actually
+                // confirmed that's the visitor's real region, but GridCompanyGln has no default
+                // and is only ever set by saving Settings once.
+                NavigationManager.NavigateTo("settings");
+                return;
+            }
+        }
+
         await RefreshAsync();
         _loading = false;
 
@@ -78,6 +98,7 @@ else
         }), null, TimeSpan.FromMinutes(1), TimeSpan.FromMinutes(1));
 
         SettingsService.SettingsChanged += OnSettingsChanged;
+        DataRefreshCoordinator.Refreshed += OnDataRefreshed;
     }
 
     private async Task RefreshAsync()
@@ -132,9 +153,16 @@ else
         StateHasChanged();
     });
 
+    private void OnDataRefreshed() => InvokeAsync(async () =>
+    {
+        await RefreshAsync();
+        StateHasChanged();
+    });
+
     public void Dispose()
     {
         _refreshTimer?.Dispose();
         SettingsService.SettingsChanged -= OnSettingsChanged;
+        DataRefreshCoordinator.Refreshed -= OnDataRefreshed;
     }
 }
