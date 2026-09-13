@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.2.7 — 2026-09-13
+
+- The Dashboard's price card now warns when the shown spot price has "slid out of window": its
+  15-minute settlement period has already ended relative to now, meaning the current period's data
+  hasn't been polled/published yet and what's shown is the last period that did have data.
+  Previously this was displayed exactly like a genuinely current price. Also added to the
+  `sensor.wattsup_price_<area>` attributes as `price_period_stale`.
+- Saving Settings now navigates to the Dashboard afterwards instead of leaving you on the settings
+  form.
+- (No add-on-visible change, included for completeness: this release also adds a public
+  browser-only demo of WattsUp, published separately to GitHub Pages — see the project README.)
+
 ## 0.2.6 — 2026-09-04
 
 - **Fix: 0.2.5 itself introduced a regression that undermined its own fix.** It corrected how
