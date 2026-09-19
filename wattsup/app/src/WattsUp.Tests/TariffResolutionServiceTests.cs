@@ -37,7 +37,7 @@ public class TariffResolutionServiceTests
     };
 
     [Fact]
-    public async Task ResolveAsync_SumsPerKwhGridRowsForSelectedHour()
+    public async Task ResolveAsync_UsesConfiguredGridTariffRowForSelectedHour()
     {
         var settings = new AppSettings { GridCompanyGln = "1234567890123" };
         _settingsRepository.Setup(r => r.GetAsync(It.IsAny<CancellationToken>())).ReturnsAsync(settings);
@@ -46,15 +46,17 @@ public class TariffResolutionServiceTests
         var gridRow = new TariffLineItem
         {
             GlnNumber = "1234567890123",
-            ChargeTypeCode = "40000",
+            ChargeTypeCode = AppSettings.DefaultGridTariffChargeTypeCode,
             ChargeOwner = "Test Grid Co",
             ValidFrom = new DateOnly(2026, 1, 1),
             ResolutionDuration = "PT1H",
             Prices = Enumerable.Range(0, 24).Select(h => (decimal)h / 100).ToList(), // hour 14 -> 0.14
             ChargeClassification = ChargeClassification.PerKwh,
         };
-        _tariffRepository.Setup(r => r.GetPerKwhRowsAsync("1234567890123", It.IsAny<DateOnly>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync([gridRow]);
+        // The grid company's other connection classes (A/B/...) are published in parallel — they
+        // must never leak into the household's price, so only the configured code is looked up.
+        _tariffRepository.Setup(r => r.GetByChargeTypeCodeAsync("1234567890123", AppSettings.DefaultGridTariffChargeTypeCode, It.IsAny<DateOnly>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(gridRow);
 
         _tariffRepository
             .Setup(r => r.GetByChargeTypeCodeAsync(NationwideCharges.SystemOperatorGln, It.IsAny<string>(), It.IsAny<DateOnly>(), It.IsAny<CancellationToken>()))
@@ -76,6 +78,23 @@ public class TariffResolutionServiceTests
         Assert.Equal(NationwideCharges.TransmissionTariffDkkPerKwh, result.TransmissionTariffDkkPerKwh);
         Assert.Equal(NationwideCharges.NormalElafgiftDkkPerKwh, result.ElafgiftDkkPerKwh);
         Assert.False(result.ElafgiftReducedApplied);
+        _tariffRepository.Verify(r => r.GetPerKwhRowsAsync(It.IsAny<string>(), It.IsAny<DateOnly>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task ResolveAsync_GridTariffCodeNotPublished_GridTariffUnresolved()
+    {
+        var settings = new AppSettings { GridCompanyGln = "1234567890123", GridTariffChargeTypeCode = "DT_X_99" };
+        _settingsRepository.Setup(r => r.GetAsync(It.IsAny<CancellationToken>())).ReturnsAsync(settings);
+        _seedRepository.Setup(r => r.GetAllAsync(It.IsAny<CancellationToken>())).ReturnsAsync(Seeds);
+        _tariffRepository
+            .Setup(r => r.GetByChargeTypeCodeAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<DateOnly>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((TariffLineItem?)null);
+
+        var result = await CreateSut().ResolveAsync(DateTimeOffset.UtcNow);
+
+        Assert.False(result.GridTariffResolved);
+        Assert.Equal(0m, result.GridTariffDkkPerKwh);
     }
 
     [Fact]

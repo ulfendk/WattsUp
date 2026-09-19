@@ -5,6 +5,7 @@
 @inject IMeteringPointRepository MeteringPointRepository
 @inject WattsUp.Services.Homeassistant.IHomeAssistantApiClient HomeAssistantApiClient
 @inject IConsumptionDeviceRepository ConsumptionDeviceRepository
+@inject ITariffRepository TariffRepository
 @inject WattsUp.Services.Mqtt.IMqttPublisherService MqttPublisherService
 @inject WattsUp.Services.IRuntimeInfo RuntimeInfo
 @inject ISnackbar Snackbar
@@ -39,10 +40,17 @@ else
                 <MudProgressCircular Size="Size.Small" Indeterminate="true" />
             }
         </MudStack>
-        <MudSelect T="string" Label="Grid company" @bind-Value="_gridCompanyGln" ToStringFunc="@GlnToDisplayName">
+        <MudSelect T="string" Label="Grid company" Value="_gridCompanyGln" ValueChanged="OnGridCompanyChangedAsync" ToStringFunc="@GlnToDisplayName">
             @foreach (var company in _gridCompanies)
             {
                 <MudSelectItem T="string" Value="@company.GlnNumber">@company.ChargeOwner</MudSelectItem>
+            }
+        </MudSelect>
+        <MudSelect T="string" Label="Grid tariff (connection class)" @bind-Value="_gridTariffChargeTypeCode"
+                   HelperText="Your grid company publishes one tariff per connection class; households normally use Nettarif C (DT_C_01).">
+            @foreach (var option in _gridTariffOptions)
+            {
+                <MudSelectItem T="string" Value="@option.Code">@option.Code — @option.Note</MudSelectItem>
             }
         </MudSelect>
     </MudPaper>
@@ -162,6 +170,8 @@ else
 
     private string _selectedPriceArea = "DK1";
     private string? _gridCompanyGln;
+    private string _gridTariffChargeTypeCode = AppSettings.DefaultGridTariffChargeTypeCode;
+    private List<(string Code, string Note)> _gridTariffOptions = [];
     private bool _electricHeatingRegistered;
     private bool _vatEnabled = true;
     private decimal _reducedElafgiftRate;
@@ -180,6 +190,7 @@ else
         var settings = await SettingsService.GetAsync();
         _selectedPriceArea = settings.PriceArea;
         _gridCompanyGln = settings.GridCompanyGln;
+        _gridTariffChargeTypeCode = settings.GridTariffChargeTypeCode;
         _electricHeatingRegistered = settings.ElectricHeatingRegistered;
         _vatEnabled = settings.VatEnabled;
         _reducedElafgiftRate = settings.ReducedElafgiftRateDkkPerKwh;
@@ -193,12 +204,44 @@ else
             _gridCompanies.Add((settings.GridCompanyGln, settings.GridCompanyName));
         }
 
+        await LoadGridTariffOptionsAsync();
+
         _meteringPoints = (await MeteringPointRepository.GetAllAsync()).ToList();
 
         _consumptionDevices = (await ConsumptionDeviceRepository.GetAllAsync()).ToList();
         _selectedConsumptionDevices = _consumptionDevices.Where(d => d.IsSelected).Select(d => d.EntityId).ToList();
 
         _loading = false;
+    }
+
+    private async Task OnGridCompanyChangedAsync(string? gln)
+    {
+        _gridCompanyGln = gln;
+        await LoadGridTariffOptionsAsync();
+    }
+
+    /// <summary>Lists the per-kWh tariff rows the selected grid company publishes today, always
+    /// keeping the currently-configured code selectable even if it isn't (yet) in the cache.</summary>
+    private async Task LoadGridTariffOptionsAsync()
+    {
+        var options = new List<(string Code, string Note)>();
+        if (!string.IsNullOrWhiteSpace(_gridCompanyGln))
+        {
+            var today = DateOnly.FromDateTime(DateTime.Today);
+            var rows = await TariffRepository.GetPerKwhRowsAsync(_gridCompanyGln, today);
+            options.AddRange(rows
+                .Where(r => r.ResolutionDuration == "PT1H")
+                .GroupBy(r => r.ChargeTypeCode)
+                .Select(g => (g.Key, g.First().Note ?? g.First().Description ?? ""))
+                .OrderBy(o => o.Key));
+        }
+
+        if (options.All(o => o.Code != _gridTariffChargeTypeCode))
+        {
+            options.Insert(0, (_gridTariffChargeTypeCode, "(not currently published)"));
+        }
+
+        _gridTariffOptions = options;
     }
 
     private async Task LoadGridCompaniesAsync()
@@ -276,6 +319,7 @@ else
                 GridCompanyGln = _gridCompanyGln,
                 GridCompanyName = gridCompanyName,
                 GridCompanySource = previousSettings.GridCompanySource,
+                GridTariffChargeTypeCode = _gridTariffChargeTypeCode,
                 SupplierSource = previousSettings.SupplierSource,
                 ElectricHeatingRegistered = _electricHeatingRegistered,
                 VatEnabled = _vatEnabled,

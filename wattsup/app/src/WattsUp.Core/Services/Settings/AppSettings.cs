@@ -12,6 +12,14 @@ public sealed record AppSettings
     public string? GridCompanyGln { get; init; }
     public string? GridCompanyName { get; init; }
 
+    /// <summary>The DatahubPricelist charge type code of the per-kWh grid tariff row for the
+    /// household's connection class. Grid companies publish one row per class (A høj, B lav, C, …)
+    /// in parallel, so only this one may feed the price. "DT_C_01" is "Nettarif C", the
+    /// standard code for household (low-voltage) customers.</summary>
+    public string GridTariffChargeTypeCode { get; init; } = DefaultGridTariffChargeTypeCode;
+
+    public const string DefaultGridTariffChargeTypeCode = "DT_C_01";
+
     /// <summary>Whether <see cref="GridCompanyGln"/>/<see cref="GridCompanyName"/> were auto-filled
     /// from the selected metering point ("metering_point") or entered by hand ("manual").</summary>
     public string GridCompanySource { get; init; } = "manual";

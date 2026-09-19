@@ -24,6 +24,8 @@ public sealed class IndexedDbSettingsRepository(IJSRuntime js) : ISettingsReposi
             GridCompanyGln = row.GridCompanyGln,
             GridCompanyName = row.GridCompanyName,
             GridCompanySource = row.GridCompanySource,
+            // Rows saved before this field existed deserialize it as null.
+            GridTariffChargeTypeCode = row.GridTariffChargeTypeCode ?? AppSettings.DefaultGridTariffChargeTypeCode,
             SupplierSource = row.SupplierSource,
             ElectricHeatingRegistered = row.ElectricHeatingRegistered,
             VatEnabled = row.VatEnabled,
@@ -42,7 +44,7 @@ public sealed class IndexedDbSettingsRepository(IJSRuntime js) : ISettingsReposi
             settings.SupplierSource, settings.ElectricHeatingRegistered, settings.VatEnabled,
             (double)settings.SupplierMarkupOrePerKwh, (double)settings.SupplierSubscriptionFeeDkkPerMonth,
             (double)settings.ReducedElafgiftRateDkkPerKwh, settings.SelectedMeteringPointGsrn,
-            settings.SelectedElafgiftAllowanceMeteringPointGsrn);
+            settings.SelectedElafgiftAllowanceMeteringPointGsrn, settings.GridTariffChargeTypeCode);
         await js.InvokeVoidAsync("wattsUpDb.settings.save", ct, row);
     }
 
@@ -50,5 +52,5 @@ public sealed class IndexedDbSettingsRepository(IJSRuntime js) : ISettingsReposi
         string PriceArea, string? GridCompanyGln, string? GridCompanyName, string GridCompanySource,
         string SupplierSource, bool ElectricHeatingRegistered, bool VatEnabled, double SupplierMarkupOrePerKwh,
         double SupplierSubscriptionFeeDkkPerMonth, double ReducedElafgiftRateDkkPerKwh,
-        string? SelectedMeteringPointGsrn, string? SelectedElafgiftAllowanceGsrn);
+        string? SelectedMeteringPointGsrn, string? SelectedElafgiftAllowanceGsrn, string? GridTariffChargeTypeCode);
 }

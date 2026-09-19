@@ -17,7 +17,7 @@ public sealed class SettingsRepository(ISqliteConnectionFactory connectionFactor
             SELECT id, price_area, grid_company_gln, grid_company_name, grid_company_source, supplier_source,
                    electric_heating_registered, vat_enabled, supplier_markup_ore_per_kwh,
                    supplier_subscription_fee_dkk_month, reduced_elafgift_rate_dkk_per_kwh,
-                   selected_metering_point_gsrn, selected_elafgift_allowance_gsrn
+                   selected_metering_point_gsrn, selected_elafgift_allowance_gsrn, grid_tariff_charge_type_code
             FROM app_settings WHERE id = 1;
             """);
 
@@ -27,6 +27,7 @@ public sealed class SettingsRepository(ISqliteConnectionFactory connectionFactor
             GridCompanyGln = row.grid_company_gln,
             GridCompanyName = row.grid_company_name,
             GridCompanySource = row.grid_company_source,
+            GridTariffChargeTypeCode = row.grid_tariff_charge_type_code,
             SupplierSource = row.supplier_source,
             ElectricHeatingRegistered = row.electric_heating_registered != 0,
             VatEnabled = row.vat_enabled != 0,
@@ -48,6 +49,7 @@ public sealed class SettingsRepository(ISqliteConnectionFactory connectionFactor
                 grid_company_gln = @GridCompanyGln,
                 grid_company_name = @GridCompanyName,
                 grid_company_source = @GridCompanySource,
+                grid_tariff_charge_type_code = @GridTariffChargeTypeCode,
                 supplier_source = @SupplierSource,
                 electric_heating_registered = @ElectricHeatingRegistered,
                 vat_enabled = @VatEnabled,
@@ -64,6 +66,7 @@ public sealed class SettingsRepository(ISqliteConnectionFactory connectionFactor
                 settings.GridCompanyGln,
                 settings.GridCompanyName,
                 settings.GridCompanySource,
+                settings.GridTariffChargeTypeCode,
                 settings.SupplierSource,
                 ElectricHeatingRegistered = settings.ElectricHeatingRegistered ? 1 : 0,
                 VatEnabled = settings.VatEnabled ? 1 : 0,
@@ -89,5 +92,6 @@ public sealed class SettingsRepository(ISqliteConnectionFactory connectionFactor
         double supplier_subscription_fee_dkk_month,
         double reduced_elafgift_rate_dkk_per_kwh,
         string? selected_metering_point_gsrn,
-        string? selected_elafgift_allowance_gsrn);
+        string? selected_elafgift_allowance_gsrn,
+        string grid_tariff_charge_type_code);
 }

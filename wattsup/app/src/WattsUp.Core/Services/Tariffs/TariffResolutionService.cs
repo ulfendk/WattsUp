@@ -66,13 +66,11 @@ public sealed class TariffResolutionService(
             return (0m, false);
         }
 
-        var rows = await tariffRepository.GetPerKwhRowsAsync(settings.GridCompanyGln, localDate, ct);
-        if (rows.Count == 0)
-        {
-            return (0m, false);
-        }
-
-        return (rows.Sum(r => r.RateForHour(hour)), true);
+        // A grid company publishes one per-kWh row per connection class (A høj, B lav, C, ...) side
+        // by side — only the household's own class may count, never the sum of all of them.
+        var row = await tariffRepository.GetByChargeTypeCodeAsync(
+            settings.GridCompanyGln, settings.GridTariffChargeTypeCode, localDate, ct);
+        return row is null ? (0m, false) : (row.RateForHour(hour), true);
     }
 
     private async Task<(decimal Rate, bool Resolved)> ResolveNationwideAsync(

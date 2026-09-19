@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.2.10 — 2026-09-19
+
+- **Fix: the grid tariff was several times too high.** Grid companies publish one per-kWh tariff
+  per connection class (A høj, A lav, B høj, B lav, C, …) in parallel, and WattsUp added all of them
+  together. It now uses only the one tariff for your connection class — by default `DT_C_01`
+  (Nettarif C, the household tariff; e.g. Radius summer daytime 15.93 øre/kWh, matching their price
+  list). You can pick another class under Settings → Grid company → Grid tariff. If the chosen
+  tariff isn't published by your grid company, the grid tariff shows as unresolved instead of
+  guessing.
+
 ## 0.2.9 — 2026-09-19
 
 - **Fix: the add-on showed "Not Found" for a while on first access.** Its server-side first render
