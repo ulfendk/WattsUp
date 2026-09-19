@@ -1,0 +1,38 @@
+@implements IDisposable
+
+<MudPaper Outlined="true" Class="pa-3 mb-4 d-flex align-center" Style="gap: 12px;" role="status" aria-live="polite">
+    <MudProgressCircular Indeterminate="true" Size="Size.Small" />
+    <MudText Typo="Typo.body2">@_phrases[_index]</MudText>
+</MudPaper>
+
+@code {
+    private static readonly string[] _phrases =
+    [
+        "Asking the grid what electrons cost today…",
+        "Bribing the spot market for a fresh price…",
+        "Counting kilowatt-hours, one sheep at a time…",
+        "Convincing the wind turbines to share their prices…",
+        "Herding the electrons into a neat little chart…",
+        "Consulting the Nord Pool oracle…",
+        "Checking whether the sun has filed its price yet…",
+        "Waking up the day-ahead prices…",
+        "Untangling tariffs, surcharges and taxes…",
+        "Politely knocking on Energi Data Service's door…",
+    ];
+
+    private readonly int _index0 = Random.Shared.Next(_phrases.Length);
+    private int _index;
+    private Timer? _timer;
+
+    protected override void OnInitialized()
+    {
+        _index = _index0;
+        _timer = new Timer(_ => InvokeAsync(() =>
+        {
+            _index = (_index + 1) % _phrases.Length;
+            StateHasChanged();
+        }), null, TimeSpan.FromSeconds(3), TimeSpan.FromSeconds(3));
+    }
+
+    public void Dispose() => _timer?.Dispose();
+}

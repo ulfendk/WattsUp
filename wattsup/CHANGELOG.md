@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.8 — 2026-09-19
+
+- The Dashboard now shows a spinner with rotating witty phrases while spot prices are being fetched
+  in the background and there's no current data to show yet, instead of an empty page. It refreshes
+  itself as soon as the fetch finishes.
+- (Public browser demo only) The "Not Found" page now shows a spinner for up to 15 seconds before
+  giving up, since a cold first load could briefly land there before the app settled.
+
 ## 0.2.7 — 2026-09-13
 
 - The Dashboard's price card now warns when the shown spot price has "slid out of window": its

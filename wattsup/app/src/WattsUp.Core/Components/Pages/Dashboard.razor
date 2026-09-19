@@ -32,6 +32,11 @@ else
         <StalenessBadge Label="Tariffs" Status="@DiagnosticsStatus.TariffPoll" WarnAfter="TimeSpan.FromDays(2)" StaleAfter="TimeSpan.FromDays(3)" />
     </MudStack>
 
+    @if (!HasCurrentData && DiagnosticsStatus.SpotPriceFetching)
+    {
+        <FetchingPricesIndicator />
+    }
+
     @if (_breakdown is not null)
     {
         <MudGrid>
@@ -52,7 +57,7 @@ else
     {
         <PriceChart Points="@_chartPoints" />
     }
-    else
+    else if (!DiagnosticsStatus.SpotPriceFetching)
     {
         <MudAlert Severity="Severity.Info" Class="mt-2">No price data cached yet for @_priceArea — the poller runs on startup and hourly.</MudAlert>
     }
@@ -69,6 +74,13 @@ else
     private SameHourComparison? _sameHourComparison;
     private AverageComparison? _averageComparison;
     private Timer? _refreshTimer;
+
+    // "Current" = we can price right now and the cached series reaches at least the present.
+    // Hourly-or-finer slots mean a series ending more than an hour ago has nothing for now.
+    private bool HasCurrentData =>
+        _breakdown is not null
+        && _chartPoints.Count > 0
+        && _chartPoints.Max(p => p.Item1) > DateTimeOffset.UtcNow.AddHours(-1);
 
     protected override async Task OnInitializedAsync()
     {
@@ -99,6 +111,7 @@ else
 
         SettingsService.SettingsChanged += OnSettingsChanged;
         DataRefreshCoordinator.Refreshed += OnDataRefreshed;
+        DiagnosticsStatus.SpotPriceFetchingChanged += OnFetchingChanged;
     }
 
     private async Task RefreshAsync()
@@ -153,6 +166,16 @@ else
         StateHasChanged();
     });
 
+    // A finished fetch has written new rows, so re-read them; a starting one just needs a repaint.
+    private void OnFetchingChanged() => InvokeAsync(async () =>
+    {
+        if (!DiagnosticsStatus.SpotPriceFetching)
+        {
+            await RefreshAsync();
+        }
+        StateHasChanged();
+    });
+
     private void OnDataRefreshed() => InvokeAsync(async () =>
     {
         await RefreshAsync();
@@ -164,5 +187,6 @@ else
         _refreshTimer?.Dispose();
         SettingsService.SettingsChanged -= OnSettingsChanged;
         DataRefreshCoordinator.Refreshed -= OnDataRefreshed;
+        DiagnosticsStatus.SpotPriceFetchingChanged -= OnFetchingChanged;
     }
 }

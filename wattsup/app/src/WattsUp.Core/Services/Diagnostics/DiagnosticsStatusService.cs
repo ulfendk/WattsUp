@@ -12,6 +12,7 @@ public sealed class DiagnosticsStatusService
     private readonly Lock _lock = new();
     private readonly List<string> _warnings = [];
 
+    private bool _spotPriceFetching;
     private PollStatus _spotPricePoll = new(null, null, null);
     private PollStatus _tariffPoll = new(null, null, null);
     private PollStatus _consumptionPoll = new(null, null, null);
@@ -19,6 +20,19 @@ public sealed class DiagnosticsStatusService
     public PollStatus SpotPricePoll { get { lock (_lock) { return _spotPricePoll; } } }
     public PollStatus TariffPoll { get { lock (_lock) { return _tariffPoll; } } }
     public PollStatus ConsumptionPoll { get { lock (_lock) { return _consumptionPoll; } } }
+
+    /// <summary>True while a spot price poll is in flight. The dashboard uses this to show a
+    /// "fetching" indicator when it has no current data to display yet.</summary>
+    public bool SpotPriceFetching { get { lock (_lock) { return _spotPriceFetching; } } }
+
+    /// <summary>Raised when <see cref="SpotPriceFetching"/> flips, on whatever thread flipped it.</summary>
+    public event Action? SpotPriceFetchingChanged;
+
+    public void SetSpotPriceFetching(bool fetching)
+    {
+        lock (_lock) { _spotPriceFetching = fetching; }
+        SpotPriceFetchingChanged?.Invoke();
+    }
 
     public IReadOnlyList<string> Warnings { get { lock (_lock) { return _warnings.ToList(); } } }
 

@@ -41,6 +41,7 @@ public sealed class SpotPricePollingService(
         var spotPriceRepository = scope.ServiceProvider.GetRequiredService<ISpotPriceRepository>();
         var mqttPublisher = scope.ServiceProvider.GetService<IMqttPublisherService>();
 
+        diagnosticsStatus.SetSpotPriceFetching(true);
         try
         {
             var settings = await settingsRepository.GetAsync(ct);
@@ -65,6 +66,10 @@ public sealed class SpotPricePollingService(
         {
             logger.LogWarning(ex, "Spot price poll failed; keeping last-known-good cached data");
             diagnosticsStatus.ReportSpotPriceFailure(ex.Message);
+        }
+        finally
+        {
+            diagnosticsStatus.SetSpotPriceFetching(false);
         }
     }
 
