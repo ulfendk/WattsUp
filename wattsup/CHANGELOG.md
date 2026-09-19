@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.9 — 2026-09-19
+
+- **Fix: the add-on showed "Not Found" for a while on first access.** Its server-side first render
+  didn't know about the pages (they live in a separate assembly), so every request 404'd until the
+  interactive connection came up and took over. The pages are now registered with the server
+  endpoint, so the Dashboard renders immediately.
+
 ## 0.2.8 — 2026-09-19
 
 - The Dashboard now shows a spinner with rotating witty phrases while spot prices are being fetched

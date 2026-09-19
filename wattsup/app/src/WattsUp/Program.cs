@@ -171,7 +171,11 @@ app.MapGet("/culture/set", (string culture, string? redirectUri, HttpContext con
 });
 
 app.MapStaticAssets();
+// The pages live in WattsUp.Core, so the endpoint must be told about that assembly too — Routes.razor's
+// AdditionalAssemblies only covers the client-side router. Without this, the server-side prerender of
+// every request 404s (showing "Not Found") until the interactive circuit connects and takes over.
 app.MapRazorComponents<App>()
+    .AddAdditionalAssemblies(typeof(WattsUp.Components.Pages.Dashboard).Assembly)
     .AddInteractiveServerRenderMode();
 
 app.Run();
