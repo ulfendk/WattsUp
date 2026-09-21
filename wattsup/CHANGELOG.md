@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.13 — 2026-09-21
+
+- Hourly price list: the quarter-hour dotted lines now use four subtle colours instead of text labels
+  (which collided when prices were close), with a one-line legend under the list.
+
 ## 0.2.12 — 2026-09-21
 
 - The hourly price list is no longer a scroll panel; it grows to show all upcoming hours.

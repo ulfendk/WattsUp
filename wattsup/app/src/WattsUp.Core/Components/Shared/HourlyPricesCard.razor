@@ -27,12 +27,10 @@
                             <td style="width: 45%;">
                                 <div class="wattsup-hour-bar">
                                     <div class="wattsup-range-track">
-                                        @for (var i = 0; i < hour.Quarters.Count; i++)
+                                        @foreach (var q in hour.Quarters)
                                         {
-                                            var q = hour.Quarters[i];
                                             var left = Pos(q.DkkPerKwh, min, span).ToString("0.##", CultureInfo.InvariantCulture);
-                                            <div class="wattsup-quarter-line" style="left: @left%;"></div>
-                                            <div class="wattsup-quarter-label @(i % 2 == 0 ? "below" : "above")" style="left: @left%;">:@q.Minute.ToString("00")</div>
+                                            <div class="wattsup-quarter-line q@(q.Minute)" style="left: @left%;"></div>
                                         }
                                         <div class="wattsup-range-marker" style="left: @position.ToString("0.##", CultureInfo.InvariantCulture)%;"></div>
                                     </div>
@@ -43,6 +41,13 @@
                     }
                 </tbody>
             </MudSimpleTable>
+            <div class="wattsup-quarter-legend">
+                @foreach (var minute in new[] { 0, 15, 30, 45 })
+                {
+                    <span><i class="wattsup-quarter-line q@(minute)"></i>:@minute.ToString("00")</span>
+                }
+                <span><i class="wattsup-range-marker"></i>avg.</span>
+            </div>
         }
     </MudCardContent>
 </MudCard>
@@ -50,11 +55,15 @@
 <style>
     .wattsup-range-track { position: relative; height: 8px; border-radius: 4px; background: linear-gradient(to right, var(--mud-palette-success), var(--mud-palette-warning), var(--mud-palette-error)); margin: 4px 0; }
     .wattsup-range-marker { position: absolute; top: -3px; width: 3px; height: 14px; background: var(--mud-palette-text-primary); border-radius: 1px; transform: translateX(-1.5px); }
-    .wattsup-hour-bar { padding: 14px 6px; }
-    .wattsup-quarter-line { position: absolute; top: -3px; height: 14px; border-left: 2px dotted var(--mud-palette-text-primary); transform: translateX(-1px); }
-    .wattsup-quarter-label { position: absolute; font-size: 10px; line-height: 12px; color: var(--mud-palette-text-secondary); transform: translateX(-50%); white-space: nowrap; }
-    .wattsup-quarter-label.below { top: 12px; }
-    .wattsup-quarter-label.above { top: -15px; }
+    .wattsup-hour-bar { padding: 6px; }
+    .wattsup-quarter-line { position: absolute; top: -3px; height: 14px; border-left: 2px dotted; transform: translateX(-1px); }
+    .wattsup-quarter-line.q0 { border-color: #5C6BC0; }
+    .wattsup-quarter-line.q15 { border-color: #AB47BC; }
+    .wattsup-quarter-line.q30 { border-color: #29B6F6; }
+    .wattsup-quarter-line.q45 { border-color: #8D6E63; }
+    .wattsup-quarter-legend { display: flex; flex-wrap: nowrap; gap: 12px; align-items: center; margin-top: 8px; font-size: 12px; color: var(--mud-palette-text-secondary); }
+    .wattsup-quarter-legend span { display: inline-flex; align-items: center; gap: 4px; }
+    .wattsup-quarter-legend i { position: static; display: inline-block; transform: none; }
 </style>
 
 @code {
