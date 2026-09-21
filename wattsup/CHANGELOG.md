@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.11 — 2026-09-21
+
+- **New: hourly price list** next to the price chart. Each upcoming hour shows its average price with
+  a green-to-red bar (same scale as the "Today's range" bar) so the cheap and expensive hours stand out.
+- Prices and durations that are already in the past are no longer shown: the chart, the hourly list
+  and the "Cheapest periods" card now only cover the current 15-minute slot and later.
+
 ## 0.2.10 — 2026-09-19
 
 - **Fix: the grid tariff was several times too high.** Grid companies publish one per-kWh tariff

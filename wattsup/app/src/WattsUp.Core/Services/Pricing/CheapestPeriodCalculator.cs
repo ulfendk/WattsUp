@@ -101,3 +101,6 @@ public static class CheapestPeriodCalculator
         return true;
     }
 }
+
+/// <summary>Average total price (DKK/kWh) over one local clock hour.</summary>
+public sealed record HourlyPrice(DateTimeOffset StartLocal, decimal AverageDkkPerKwh);

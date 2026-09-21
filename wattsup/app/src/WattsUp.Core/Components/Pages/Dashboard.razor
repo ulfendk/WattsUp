@@ -52,10 +52,17 @@ else
         </MudGrid>
     }
 
-    <MudText Typo="Typo.h5" Class="mt-6 mb-2">Today &amp; tomorrow</MudText>
+    <MudText Typo="Typo.h5" Class="mt-6 mb-2">Upcoming prices</MudText>
     @if (_chartPoints.Count > 0)
     {
-        <PriceChart Points="@_chartPoints" />
+        <MudGrid>
+            <MudItem xs="12" md="4">
+                <HourlyPricesCard Hours="@_hourlyPrices" />
+            </MudItem>
+            <MudItem xs="12" md="8">
+                <PriceChart Points="@_chartPoints" />
+            </MudItem>
+        </MudGrid>
     }
     else if (!DiagnosticsStatus.SpotPriceFetching)
     {
@@ -69,6 +76,7 @@ else
     private PriceBreakdown? _breakdown;
     private List<(DateTimeOffset, decimal)> _chartPoints = [];
     private IReadOnlyList<CheapestPeriodResult> _cheapestPeriods = [];
+    private IReadOnlyList<HourlyPrice> _hourlyPrices = [];
     private HourOverHourTrend? _hourOverHourTrend;
     private TodayPriceRange? _todayRange;
     private SameHourComparison? _sameHourComparison;
@@ -124,6 +132,7 @@ else
             _breakdown = null;
             _chartPoints = [];
             _cheapestPeriods = [];
+            _hourlyPrices = [];
             _hourOverHourTrend = null;
             _todayRange = null;
             _sameHourComparison = null;
@@ -139,7 +148,14 @@ else
         var fromUtc = localMidnight.ToUniversalTime();
         var toUtc = fromUtc.AddDays(2);
 
-        var spotPrices = await SpotPriceRepository.GetRangeAsync(_priceArea, fromUtc, toUtc);
+        var spotPrices = (await SpotPriceRepository.GetRangeAsync(_priceArea, fromUtc, toUtc)).ToList();
+        // Drop slots that are already over: keep the slot containing "now" (the latest one that
+        // started at or before now) and everything after it.
+        var currentSlotStart = spotPrices.Where(sp => sp.TimeUtc <= nowUtc).Select(sp => (DateTimeOffset?)sp.TimeUtc).Max();
+        if (currentSlotStart is not null)
+        {
+            spotPrices = spotPrices.Where(sp => sp.TimeUtc >= currentSlotStart).ToList();
+        }
         var points = new List<(DateTimeOffset, decimal)>();
         var utcPoints = new List<(DateTimeOffset AtUtc, decimal TotalDkkPerKwh)>();
         foreach (var spot in spotPrices)
@@ -153,6 +169,12 @@ else
         // Contiguity checks use UTC, not the localized display times above, so a DST transition
         // (a 23- or 25-hour local day) can't be mistaken for a gap in the hourly data.
         _cheapestPeriods = CheapestPeriodCalculator.FindCheapestPeriods(utcPoints, [1, 2, 3, 4, 5, 6]);
+        // Average each (UTC-aligned; Copenhagen offsets are whole hours) hour over its remaining slots.
+        _hourlyPrices = utcPoints
+            .GroupBy(p => new DateTimeOffset(p.AtUtc.UtcDateTime.Date.AddHours(p.AtUtc.UtcDateTime.Hour), TimeSpan.Zero))
+            .OrderBy(g => g.Key)
+            .Select(g => new HourlyPrice(TimeZoneInfo.ConvertTime(g.Key, WattsUp.Services.Tariffs.TariffResolutionService.CopenhagenTimeZone), g.Average(x => x.TotalDkkPerKwh)))
+            .ToList();
 
         _hourOverHourTrend = await PriceTrendService.GetHourOverHourTrendAsync(_priceArea, nowUtc);
         _todayRange = await PriceTrendService.GetTodayRangeAsync(_priceArea, nowUtc);

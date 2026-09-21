@@ -1,0 +1,47 @@
+@using System.Globalization
+<MudCard Outlined="true">
+    <MudCardHeader>
+        <CardHeaderContent>
+            <MudText Typo="Typo.h6">Hourly prices</MudText>
+            <MudText Typo="Typo.caption">Average per hour, known hours from now on</MudText>
+        </CardHeaderContent>
+    </MudCardHeader>
+    <MudCardContent Style="max-height: 300px; overflow-y: auto;">
+        @if (Hours.Count == 0)
+        {
+            <MudText Typo="Typo.body2">No upcoming prices yet.</MudText>
+        }
+        else
+        {
+            var min = Hours.Min(h => h.AverageDkkPerKwh);
+            var span = Hours.Max(h => h.AverageDkkPerKwh) - min;
+            <MudSimpleTable Dense="true" Hover="false" Elevation="0">
+                <tbody>
+                    @foreach (var hour in Hours)
+                    {
+                        var position = span <= 0m ? 50m : (hour.AverageDkkPerKwh - min) / span * 100m;
+                        <tr>
+                            <td>@hour.StartLocal.ToString("ddd HH:mm", CultureInfo.CurrentCulture)</td>
+                            <td style="width: 45%;">
+                                <div class="wattsup-range-track">
+                                    <div class="wattsup-range-marker" style="left: @position.ToString("0.##", CultureInfo.InvariantCulture)%;"></div>
+                                </div>
+                            </td>
+                            <td class="text-right">@hour.AverageDkkPerKwh.ToString("N4", CultureInfo.CurrentCulture)</td>
+                        </tr>
+                    }
+                </tbody>
+            </MudSimpleTable>
+        }
+    </MudCardContent>
+</MudCard>
+
+<style>
+    .wattsup-range-track { position: relative; height: 8px; border-radius: 4px; background: linear-gradient(to right, var(--mud-palette-success), var(--mud-palette-warning), var(--mud-palette-error)); margin: 4px 0; }
+    .wattsup-range-marker { position: absolute; top: -3px; width: 3px; height: 14px; background: var(--mud-palette-text-primary); border-radius: 1px; transform: translateX(-1.5px); }
+</style>
+
+@code {
+    [Parameter, EditorRequired]
+    public IReadOnlyList<HourlyPrice> Hours { get; set; } = [];
+}
