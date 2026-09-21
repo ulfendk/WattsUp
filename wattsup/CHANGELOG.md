@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.12 — 2026-09-21
+
+- The hourly price list is no longer a scroll panel; it grows to show all upcoming hours.
+- Each hour's bar now has a dotted line for every 15-minute slot (labelled :00, :15, :30, :45) at that
+  slot's price, next to the solid marker for the hour's average.
+
 ## 0.2.11 — 2026-09-21
 
 - **New: hourly price list** next to the price chart. Each upcoming hour shows its average price with

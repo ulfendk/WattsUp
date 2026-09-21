@@ -6,25 +6,36 @@
             <MudText Typo="Typo.caption">Average per hour, known hours from now on</MudText>
         </CardHeaderContent>
     </MudCardHeader>
-    <MudCardContent Style="max-height: 300px; overflow-y: auto;">
+    <MudCardContent>
         @if (Hours.Count == 0)
         {
             <MudText Typo="Typo.body2">No upcoming prices yet.</MudText>
         }
         else
         {
-            var min = Hours.Min(h => h.AverageDkkPerKwh);
-            var span = Hours.Max(h => h.AverageDkkPerKwh) - min;
+            // Scale over the quarters too, so every dotted line lands inside the bar.
+            var all = Hours.SelectMany(h => h.Quarters.Select(q => q.DkkPerKwh).Append(h.AverageDkkPerKwh)).ToList();
+            var min = all.Min();
+            var span = all.Max() - min;
             <MudSimpleTable Dense="true" Hover="false" Elevation="0">
                 <tbody>
                     @foreach (var hour in Hours)
                     {
-                        var position = span <= 0m ? 50m : (hour.AverageDkkPerKwh - min) / span * 100m;
+                        var position = Pos(hour.AverageDkkPerKwh, min, span);
                         <tr>
                             <td>@hour.StartLocal.ToString("ddd HH:mm", CultureInfo.CurrentCulture)</td>
                             <td style="width: 45%;">
-                                <div class="wattsup-range-track">
-                                    <div class="wattsup-range-marker" style="left: @position.ToString("0.##", CultureInfo.InvariantCulture)%;"></div>
+                                <div class="wattsup-hour-bar">
+                                    <div class="wattsup-range-track">
+                                        @for (var i = 0; i < hour.Quarters.Count; i++)
+                                        {
+                                            var q = hour.Quarters[i];
+                                            var left = Pos(q.DkkPerKwh, min, span).ToString("0.##", CultureInfo.InvariantCulture);
+                                            <div class="wattsup-quarter-line" style="left: @left%;"></div>
+                                            <div class="wattsup-quarter-label @(i % 2 == 0 ? "below" : "above")" style="left: @left%;">:@q.Minute.ToString("00")</div>
+                                        }
+                                        <div class="wattsup-range-marker" style="left: @position.ToString("0.##", CultureInfo.InvariantCulture)%;"></div>
+                                    </div>
                                 </div>
                             </td>
                             <td class="text-right">@hour.AverageDkkPerKwh.ToString("N4", CultureInfo.CurrentCulture)</td>
@@ -39,9 +50,17 @@
 <style>
     .wattsup-range-track { position: relative; height: 8px; border-radius: 4px; background: linear-gradient(to right, var(--mud-palette-success), var(--mud-palette-warning), var(--mud-palette-error)); margin: 4px 0; }
     .wattsup-range-marker { position: absolute; top: -3px; width: 3px; height: 14px; background: var(--mud-palette-text-primary); border-radius: 1px; transform: translateX(-1.5px); }
+    .wattsup-hour-bar { padding: 14px 6px; }
+    .wattsup-quarter-line { position: absolute; top: -3px; height: 14px; border-left: 2px dotted var(--mud-palette-text-primary); transform: translateX(-1px); }
+    .wattsup-quarter-label { position: absolute; font-size: 10px; line-height: 12px; color: var(--mud-palette-text-secondary); transform: translateX(-50%); white-space: nowrap; }
+    .wattsup-quarter-label.below { top: 12px; }
+    .wattsup-quarter-label.above { top: -15px; }
 </style>
 
 @code {
     [Parameter, EditorRequired]
     public IReadOnlyList<HourlyPrice> Hours { get; set; } = [];
+
+    private static decimal Pos(decimal value, decimal min, decimal span) =>
+        span <= 0m ? 50m : (value - min) / span * 100m;
 }

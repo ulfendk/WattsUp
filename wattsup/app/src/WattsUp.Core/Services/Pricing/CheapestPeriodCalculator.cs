@@ -103,4 +103,7 @@ public static class CheapestPeriodCalculator
 }
 
 /// <summary>Average total price (DKK/kWh) over one local clock hour.</summary>
-public sealed record HourlyPrice(DateTimeOffset StartLocal, decimal AverageDkkPerKwh);
+public sealed record HourlyPrice(DateTimeOffset StartLocal, decimal AverageDkkPerKwh, IReadOnlyList<QuarterPrice> Quarters);
+
+/// <summary>Price of one slot within an hour; <paramref name="Minute"/> is its start (0, 15, 30, 45).</summary>
+public sealed record QuarterPrice(int Minute, decimal DkkPerKwh);

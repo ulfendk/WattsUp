@@ -173,7 +173,10 @@ else
         _hourlyPrices = utcPoints
             .GroupBy(p => new DateTimeOffset(p.AtUtc.UtcDateTime.Date.AddHours(p.AtUtc.UtcDateTime.Hour), TimeSpan.Zero))
             .OrderBy(g => g.Key)
-            .Select(g => new HourlyPrice(TimeZoneInfo.ConvertTime(g.Key, WattsUp.Services.Tariffs.TariffResolutionService.CopenhagenTimeZone), g.Average(x => x.TotalDkkPerKwh)))
+            .Select(g => new HourlyPrice(
+                TimeZoneInfo.ConvertTime(g.Key, WattsUp.Services.Tariffs.TariffResolutionService.CopenhagenTimeZone),
+                g.Average(x => x.TotalDkkPerKwh),
+                g.OrderBy(x => x.AtUtc).Select(x => new QuarterPrice(x.AtUtc.UtcDateTime.Minute, x.TotalDkkPerKwh)).ToList()))
             .ToList();
 
         _hourOverHourTrend = await PriceTrendService.GetHourOverHourTrendAsync(_priceArea, nowUtc);
