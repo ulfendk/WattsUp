@@ -36,7 +36,7 @@ public static class PriceClockRenderer
         {
             var min = hourlyAverages.Values.Min();
             var span = hourlyAverages.Values.Max() - min;
-            foreach (var (hour, price) in hourlyAverages)
+            foreach (var (hour, average) in hourlyAverages)
             {
                 if (hour is < 0 or > 23)
                 {
@@ -44,7 +44,7 @@ public static class PriceClockRenderer
                 }
                 colours[hour] = hour < currentHour
                     ? Passed
-                    : Scale(span <= 0m ? 0.5 : (double)((price - min) / span));
+                    : Scale(span <= 0m ? 0.5 : (double)((average - min) / span));
             }
         }
 
