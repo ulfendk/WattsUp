@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.15 — 2026-11-10
+
+- **New: price clock image** (`image.wattsup_price_clock`). Today's prices as a 24-hour clock — one
+  slice per hour, midnight at the top, coloured green → orange → red over the day's range like the
+  hourly list, passed hours greyed out, the current hour sticking out and the current price in the
+  middle. Published over MQTT, so automations can attach it to phone notifications.
+
 ## 0.2.14 — 2026-11-10
 
 - **New: `upcoming_prices` attribute** on the price sensor — the all-in price for the current

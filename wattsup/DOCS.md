@@ -41,6 +41,11 @@ cached — the state is a
 timestamp (usable directly in automations), with `average_price_dkk_per_kwh`,
 `duration_hours`, and `ends_at_utc` as attributes.
 
+An `image.wattsup_price_clock` entity shows today's prices as a 24-hour clock: one slice per hour
+with midnight at the top, coloured green → orange → red over the day's range, passed hours greyed
+out, the current hour sticking out and the current price in the middle. Attach it to a companion-app
+notification with `data: {image: "{{ state_attr('image.wattsup_price_clock', 'entity_picture') }}"}`.
+
 A `sensor.wattsup_diagnostics` entity reports poller staleness and which MQTT broker source is
 active. Subscription-style fees (grid "abo" line items, your supplier's monthly fee) are shown in
 the UI but are never added to the published per-kWh price.

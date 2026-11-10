@@ -78,6 +78,9 @@ public class MqttPublisherServiceTests
             .ReturnsAsync((string _, DateTimeOffset at, CancellationToken _) =>
                 Breakdown(at, periodStart, at >= periodStart.AddHours(1) && at < periodStart.AddHours(2) ? 1m : 3m));
 
+        _spotPriceRepository
+            .Setup(r => r.GetRangeAsync("DK2", It.IsAny<DateTimeOffset>(), It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([]);
         // Only periods from the current one onwards may be asked for — earlier ones are already over.
         _spotPriceRepository
             .Setup(r => r.GetRangeAsync("DK2", periodStart, It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>()))
@@ -105,6 +108,12 @@ public class MqttPublisherServiceTests
         Assert.Equal(1m, upcoming[4].GetProperty("price").GetDecimal());
         Assert.Equal(periodStart.AddHours(1),
             DateTimeOffset.Parse(Payload(MqttDiscoveryPayloadBuilder.CheapestPeriodStateTopic(1))));
+        lock (published)
+        {
+            var clock = published.First(m => m.Topic == MqttDiscoveryPayloadBuilder.PriceClockImageTopic);
+            Assert.True(clock.Retain);
+            Assert.Equal(0x89, clock.Payload.FirstSpan[0]);
+        }
     }
 
     private static PriceBreakdown Breakdown(DateTimeOffset at, DateTimeOffset periodStart, decimal total) => new()
