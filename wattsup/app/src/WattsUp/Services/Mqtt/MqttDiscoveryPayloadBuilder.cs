@@ -24,6 +24,9 @@ public static class MqttDiscoveryPayloadBuilder
     public static string CheapestPeriodAttributesTopic(int hours) => $"wattsup/cheapest_period/{hours}h/attributes";
     public static string CheapestPeriodDiscoveryTopic(int hours) => $"homeassistant/sensor/wattsup_cheapest_start_{hours}h/config";
 
+    public static string PriceClockImageTopic => "wattsup/price_clock/image";
+    public static string PriceClockDiscoveryTopic => "homeassistant/image/wattsup_price_clock/config";
+
     private static Device DeviceInfo => new(["wattsup"], "WattsUp", "WattsUp");
 
     public static string BuildPriceDiscoveryPayload(string priceArea)
@@ -62,6 +65,17 @@ public static class MqttDiscoveryPayloadBuilder
         return JsonSerializer.Serialize(config, JsonOptions);
     }
 
+    /// <summary>An MQTT image entity whose payload is the raw PNG from <see cref="Pricing.PriceClockRenderer"/>.</summary>
+    public static string BuildPriceClockDiscoveryPayload() => JsonSerializer.Serialize(new ImageDiscoveryConfig
+    {
+        Name = "WattsUp Price Clock",
+        UniqueId = "wattsup_price_clock",
+        ImageTopic = PriceClockImageTopic,
+        AvailabilityTopic = AvailabilityTopic,
+        Icon = "mdi:clock-time-four-outline",
+        Device = DeviceInfo,
+    }, JsonOptions);
+
     public static string BuildDiagnosticsDiscoveryPayload()
     {
         var config = new SensorDiscoveryConfig
@@ -96,6 +110,19 @@ public static class MqttDiscoveryPayloadBuilder
         [JsonPropertyName("unit_of_measurement")] public string? UnitOfMeasurement { get; init; }
         [JsonPropertyName("device_class")] public string? DeviceClass { get; init; }
         [JsonPropertyName("state_class")] public string? StateClass { get; init; }
+        [JsonPropertyName("icon")] public string? Icon { get; init; }
+        [JsonPropertyName("device")] public required Device Device { get; init; }
+    }
+
+    private sealed record ImageDiscoveryConfig
+    {
+        [JsonPropertyName("name")] public required string Name { get; init; }
+        [JsonPropertyName("unique_id")] public required string UniqueId { get; init; }
+        [JsonPropertyName("image_topic")] public required string ImageTopic { get; init; }
+        [JsonPropertyName("content_type")] public string ContentType { get; init; } = "image/png";
+        [JsonPropertyName("availability_topic")] public required string AvailabilityTopic { get; init; }
+        [JsonPropertyName("payload_available")] public string PayloadAvailable { get; init; } = "online";
+        [JsonPropertyName("payload_not_available")] public string PayloadNotAvailable { get; init; } = "offline";
         [JsonPropertyName("icon")] public string? Icon { get; init; }
         [JsonPropertyName("device")] public required Device Device { get; init; }
     }

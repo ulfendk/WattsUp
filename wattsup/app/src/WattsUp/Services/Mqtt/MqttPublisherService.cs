@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text;
 using Microsoft.Extensions.Hosting;
 using MQTTnet;
 using WattsUp.Data.Repositories;
@@ -34,6 +35,7 @@ public sealed class MqttPublisherService : BackgroundService, IMqttPublisherServ
     private readonly HashSet<string> _discoveredPriceAreas = [];
     private bool _diagnosticsDiscoveryPublished;
     private bool _cheapestPeriodDiscoveryPublished;
+    private bool _priceClockDiscoveryPublished;
 
     public MqttPublisherService(
         IMqttBrokerResolver brokerResolver,
@@ -145,6 +147,7 @@ public sealed class MqttPublisherService : BackgroundService, IMqttPublisherServ
         _discoveredPriceAreas.Clear();
         _diagnosticsDiscoveryPublished = false;
         _cheapestPeriodDiscoveryPublished = false;
+        _priceClockDiscoveryPublished = false;
         await PublishAvailabilityAsync(online: true);
         return true;
     }
@@ -166,6 +169,7 @@ public sealed class MqttPublisherService : BackgroundService, IMqttPublisherServ
                 MqttDiscoveryPayloadBuilder.Serialize(BuildAttributes(breakdown, upcomingPrices)), retain: false);
 
             await PublishCheapestPeriodsAsync(upcomingPrices);
+            await PublishPriceClockAsync(settings.PriceArea, breakdown, now, ct);
         }
 
         await EnsureDiagnosticsDiscoveryAsync();
@@ -251,6 +255,36 @@ public sealed class MqttPublisherService : BackgroundService, IMqttPublisherServ
         }
     }
 
+    /// <summary>Today's prices as a 24-hour clock image (see <see cref="PriceClockRenderer"/>), retained
+    /// so Home Assistant has it straight after a restart.</summary>
+    private async Task PublishPriceClockAsync(string priceArea, PriceBreakdown current, DateTimeOffset now, CancellationToken ct)
+    {
+        var localNow = TimeZoneInfo.ConvertTime(now, TariffResolutionService.CopenhagenTimeZone);
+        var fromUtc = new DateTimeOffset(localNow.Date, localNow.Offset).ToUniversalTime();
+
+        var spotPrices = await _spotPriceRepository.GetRangeAsync(priceArea, fromUtc, fromUtc.AddDays(1), ct);
+        var byHour = new Dictionary<int, List<decimal>>();
+        foreach (var spot in spotPrices)
+        {
+            var hour = TimeZoneInfo.ConvertTime(spot.TimeUtc, TariffResolutionService.CopenhagenTimeZone).Hour;
+            var total = (await _priceCalculationService.CalculateAsync(priceArea, spot.TimeUtc, ct)).TotalDkkPerKwh;
+            (byHour.TryGetValue(hour, out var list) ? list : byHour[hour] = []).Add(total);
+        }
+
+        var png = PriceClockRenderer.RenderPng(
+            byHour.ToDictionary(h => h.Key, h => h.Value.Average()),
+            localNow.Hour,
+            current.SpotPriceResolved ? current.TotalDkkPerKwh : null);
+
+        if (!_priceClockDiscoveryPublished)
+        {
+            await PublishAsync(MqttDiscoveryPayloadBuilder.PriceClockDiscoveryTopic,
+                MqttDiscoveryPayloadBuilder.BuildPriceClockDiscoveryPayload(), retain: true);
+            _priceClockDiscoveryPublished = true;
+        }
+        await PublishAsync(MqttDiscoveryPayloadBuilder.PriceClockImageTopic, png, retain: true);
+    }
+
     private async Task EnsureCheapestPeriodDiscoveryAsync()
     {
         if (_cheapestPeriodDiscoveryPublished)
@@ -298,7 +332,10 @@ public sealed class MqttPublisherService : BackgroundService, IMqttPublisherServ
     private Task PublishAvailabilityAsync(bool online) =>
         PublishAsync(MqttDiscoveryPayloadBuilder.AvailabilityTopic, online ? "online" : "offline", retain: true);
 
-    private async Task PublishAsync(string topic, string payload, bool retain)
+    private Task PublishAsync(string topic, string payload, bool retain) =>
+        PublishAsync(topic, Encoding.UTF8.GetBytes(payload), retain);
+
+    private async Task PublishAsync(string topic, byte[] payload, bool retain)
     {
         if (!_client.IsConnected)
         {
