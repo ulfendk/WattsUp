@@ -31,10 +31,13 @@ whichever single price area is currently tracked — switching areas removes the
 - **Attributes**: the full cost breakdown, whether the reduced elafgift rate is in effect, whether
   every input resolved from live data or fell back to a cached/seeded value, and
   `price_period_start_utc` — the start of the (15-minute, as of Denmark's current market
-  resolution) settlement period this price actually covers.
+  resolution) settlement period this price actually covers. `upcoming_prices` lists the all-in
+  price for that period and every later one already published, as `{start, price}` pairs (start in
+  UTC), so automations can tell when a peak ends.
 
 Six `sensor.wattsup_cheapest_start_<n>h` entities (n = 1–6) publish the start time of the cheapest
-contiguous window of that many hours, over whatever price data is cached — the state is a
+contiguous window of that many hours, from the current period onwards over whatever price data is
+cached — the state is a
 timestamp (usable directly in automations), with `average_price_dkk_per_kwh`,
 `duration_hours`, and `ends_at_utc` as attributes.
 

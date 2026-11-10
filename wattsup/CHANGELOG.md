@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.2.14 — 2026-11-10
+
+- **New: `upcoming_prices` attribute** on the price sensor — the all-in price for the current
+  15-minute period and every later one already published (`start` in UTC, `price` in DKK/kWh), so
+  Home Assistant automations can tell when a price peak ends.
+- **Fix: the cheapest 1–6 hour windows could lie in the past.** They were searched from local
+  midnight, so after the night's cheap hours had passed the sensors still pointed at them. They now
+  only consider the current period and later, like the dashboard's "Cheapest periods" card.
+
 ## 0.2.13 — 2026-09-21
 
 - Hourly price list: the quarter-hour dotted lines now use four subtle colours instead of text labels

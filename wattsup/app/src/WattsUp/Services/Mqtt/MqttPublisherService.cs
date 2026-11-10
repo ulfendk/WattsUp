@@ -161,10 +161,11 @@ public sealed class MqttPublisherService : BackgroundService, IMqttPublisherServ
             var breakdown = await _priceCalculationService.CalculateAsync(settings.PriceArea, now, ct);
             await PublishAsync(MqttDiscoveryPayloadBuilder.PriceStateTopic(settings.PriceArea),
                 breakdown.TotalDkkPerKwh.ToString("0.#####", CultureInfo.InvariantCulture), retain: false);
+            var upcomingPrices = await GetUpcomingPricesAsync(settings.PriceArea, breakdown, now, ct);
             await PublishAsync(MqttDiscoveryPayloadBuilder.PriceAttributesTopic(settings.PriceArea),
-                MqttDiscoveryPayloadBuilder.Serialize(BuildAttributes(breakdown)), retain: false);
+                MqttDiscoveryPayloadBuilder.Serialize(BuildAttributes(breakdown, upcomingPrices)), retain: false);
 
-            await PublishCheapestPeriodsAsync(settings.PriceArea, now, ct);
+            await PublishCheapestPeriodsAsync(upcomingPrices);
         }
 
         await EnsureDiagnosticsDiscoveryAsync();
@@ -179,7 +180,8 @@ public sealed class MqttPublisherService : BackgroundService, IMqttPublisherServ
             retain: false);
     }
 
-    private static object BuildAttributes(PriceBreakdown b) => new
+    private static object BuildAttributes(
+        PriceBreakdown b, IReadOnlyList<(DateTimeOffset AtUtc, decimal TotalDkkPerKwh)> upcomingPrices) => new
     {
         spot_price_dkk_per_kwh = b.SpotPriceDkkPerKwh,
         grid_tariff_dkk_per_kwh = b.GridTariffDkkPerKwh,
@@ -195,26 +197,40 @@ public sealed class MqttPublisherService : BackgroundService, IMqttPublisherServ
         as_of_utc = b.AtUtc.ToString("O"),
         price_period_start_utc = b.PricePeriodStartUtc?.ToString("O"),
         price_period_stale = b.SpotPricePeriodStale,
+        // Every known settlement period from the current one onwards, so automations can tell
+        // when a price peak ends without a second price integration.
+        upcoming_prices = upcomingPrices.Select(p => new
+        {
+            start = p.AtUtc.ToString("O"),
+            price = Math.Round(p.TotalDkkPerKwh, 4),
+        }),
     };
 
-    /// <summary>Backlog item 7: publishes the cheapest 1–6 hour contiguous window's start time,
-    /// over whatever hourly prices are already cached (today + published day-ahead prices).</summary>
-    private async Task PublishCheapestPeriodsAsync(string priceArea, DateTimeOffset now, CancellationToken ct)
+    /// <summary>Total prices for the current settlement period and every later one already cached
+    /// (today + published day-ahead prices). Periods that have already ended are left out.</summary>
+    private async Task<IReadOnlyList<(DateTimeOffset AtUtc, decimal TotalDkkPerKwh)>> GetUpcomingPricesAsync(
+        string priceArea, PriceBreakdown current, DateTimeOffset now, CancellationToken ct)
     {
         var localNow = TimeZoneInfo.ConvertTime(now, TariffResolutionService.CopenhagenTimeZone);
         var localMidnight = new DateTimeOffset(localNow.Date, localNow.Offset);
-        var fromUtc = localMidnight.ToUniversalTime();
-        var toUtc = fromUtc.AddDays(2);
+        var fromUtc = current.PricePeriodStartUtc ?? now.AddTicks(-(now.Ticks % BoundaryInterval.Ticks));
+        var toUtc = localMidnight.ToUniversalTime().AddDays(2);
 
         var spotPrices = await _spotPriceRepository.GetRangeAsync(priceArea, fromUtc, toUtc, ct);
-        var hourlyPrices = new List<(DateTimeOffset AtUtc, decimal TotalDkkPerKwh)>(spotPrices.Count);
+        var prices = new List<(DateTimeOffset AtUtc, decimal TotalDkkPerKwh)>(spotPrices.Count);
         foreach (var spot in spotPrices)
         {
             var breakdown = await _priceCalculationService.CalculateAsync(priceArea, spot.TimeUtc, ct);
-            hourlyPrices.Add((spot.TimeUtc, breakdown.TotalDkkPerKwh));
+            prices.Add((spot.TimeUtc, breakdown.TotalDkkPerKwh));
         }
+        return prices;
+    }
 
-        var results = CheapestPeriodCalculator.FindCheapestPeriods(hourlyPrices, CheapestPeriodDurationsHours);
+    /// <summary>Backlog item 7: publishes the cheapest 1–6 hour contiguous window's start time over
+    /// the upcoming prices, so a window that has already passed is never suggested.</summary>
+    private async Task PublishCheapestPeriodsAsync(IReadOnlyList<(DateTimeOffset AtUtc, decimal TotalDkkPerKwh)> upcomingPrices)
+    {
+        var results = CheapestPeriodCalculator.FindCheapestPeriods(upcomingPrices, CheapestPeriodDurationsHours);
 
         await EnsureCheapestPeriodDiscoveryAsync();
         foreach (var result in results)
