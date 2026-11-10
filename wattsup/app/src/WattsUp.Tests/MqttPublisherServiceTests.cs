@@ -76,7 +76,7 @@ public class MqttPublisherServiceTests
         _priceCalculationService
             .Setup(s => s.CalculateAsync("DK2", It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((string _, DateTimeOffset at, CancellationToken _) =>
-                Breakdown(at, periodStart, at == periodStart.AddHours(1) ? 1m : 3m));
+                Breakdown(at, periodStart, at >= periodStart.AddHours(1) && at < periodStart.AddHours(2) ? 1m : 3m));
 
         // Only periods from the current one onwards may be asked for — earlier ones are already over.
         _spotPriceRepository
