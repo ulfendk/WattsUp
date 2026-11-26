@@ -20,8 +20,8 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: "10.0.x"
       - run: dotnet test wattsup/app/WattsUp.slnx
@@ -37,10 +37,10 @@ jobs:
       contents: read
       packages: write
     steps:
-      - uses: actions/checkout@v4
-      - uses: docker/setup-qemu-action@v3
-      - uses: docker/setup-buildx-action@v3
-      - uses: docker/login-action@v3
+      - uses: actions/checkout@v7
+      - uses: docker/setup-qemu-action@v4
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -50,7 +50,7 @@ jobs:
       # GHCR image paths must be lowercase; the repo itself ("ulfendk/WattsUp") isn't.
       - id: image
         run: echo "repo=$(echo 'ghcr.io/${{ github.repository }}/wattsup' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
-      - uses: docker/build-push-action@v6
+      - uses: docker/build-push-action@v7
         with:
           context: wattsup
           platforms: linux/amd64,linux/arm64
@@ -79,8 +79,8 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: "10.0.x"
       # Without this, publish falls back to an unoptimized/interpreted build (the SDK warns about
@@ -98,7 +98,7 @@ jobs:
       - id: tariff-week
         run: echo "key=tariff-snapshot-$(date -u +%G-W%V)" >> "$GITHUB_OUTPUT"
       - id: tariff-cache
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         with:
           path: tariff-snapshot
           key: ${{ steps.tariff-week.outputs.key }}
@@ -115,7 +115,7 @@ jobs:
       # Saved only when this week's fetch succeeded — a stale fallback copy must not be stored
       # under this week's key, or nothing would retry the fetch until next week.
       - if: steps.fetch-tariffs.outcome == 'success'
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v6
         with:
           path: tariff-snapshot
           key: ${{ steps.tariff-week.outputs.key }}
@@ -133,8 +133,11 @@ jobs:
       # Belt-and-suspenders alongside the committed wwwroot/.nojekyll — GitHub Pages runs Jekyll by
       # default, which silently drops any "_"-prefixed folder, fatal for Blazor's _framework/.
       - run: touch publish-output/wwwroot/.nojekyll
-      - uses: actions/upload-pages-artifact@v3
+      # Since v4 this action drops dotfiles unless told otherwise, which would silently lose the
+      # .nojekyll above.
+      - uses: actions/upload-pages-artifact@v5
         with:
           path: publish-output/wwwroot
+          include-hidden-files: true
       - id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
