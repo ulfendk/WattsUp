@@ -9,7 +9,8 @@ on:
   schedule:
     # Refreshes the public demo's price/tariff snapshot (deploy-pages below) — the demo has no
     # server able to poll api.energidataservice.dk itself, see fetch_price_snapshot.py. Every 6h is
-    # plenty: next-day spot prices publish once daily, and tariffs change rarely.
+    # plenty: next-day spot prices publish once daily. Tariffs change rarely and are refetched only
+    # weekly (cached in between, see deploy-pages).
     - cron: "0 */6 * * *"
   # Lets deploy-pages be triggered manually for any branch/ref (e.g. `gh workflow run build.yml
   # --ref <branch>`) — handy to preview the public demo before it's merged to main.
@@ -89,7 +90,45 @@ jobs:
       # Overwrites the committed wwwroot/data/*.json baseline with a fresh snapshot before
       # publishing — api.energidataservice.dk has no CORS support (confirmed, not assumed), so the
       # WASM app can't fetch it live from a visitor's browser; see StaticSnapshotEnergiDataServiceClient.
-      - run: python3 .github/scripts/fetch_price_snapshot.py --out-dir wattsup/app/src/WattsUp.Wasm/wwwroot/data
+      # Prices: one small request, refreshed every run — they're why the schedule exists.
+      - run: python3 .github/scripts/fetch_price_snapshot.py prices --out-dir wattsup/app/src/WattsUp.Wasm/wwwroot/data
+      # Tariffs: ~9 large paginated requests that the API rate-limits hard (429) from runner IPs,
+      # yet they change rarely — so they're cached and refetched only once per ISO week. The
+      # snapshot keeps upcoming rows too (see is_current_or_upcoming), so a week-old copy stays correct.
+      - id: tariff-week
+        run: echo "key=tariff-snapshot-$(date -u +%G-W%V)" >> "$GITHUB_OUTPUT"
+      - id: tariff-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: tariff-snapshot
+          key: ${{ steps.tariff-week.outputs.key }}
+          # On a new week, start from the newest older snapshot, so a failed refetch below still
+          # leaves something fresher than the committed baseline.
+          restore-keys: tariff-snapshot-
+      - id: fetch-tariffs
+        if: steps.tariff-cache.outputs.cache-hit != 'true'
+        continue-on-error: true
+        run: |
+          mkdir -p tariff-fresh
+          python3 .github/scripts/fetch_price_snapshot.py tariffs --out-dir tariff-fresh
+          rm -rf tariff-snapshot && mv tariff-fresh tariff-snapshot
+      # Saved only when this week's fetch succeeded — a stale fallback copy must not be stored
+      # under this week's key, or nothing would retry the fetch until next week.
+      - if: steps.fetch-tariffs.outcome == 'success'
+        uses: actions/cache/save@v4
+        with:
+          path: tariff-snapshot
+          key: ${{ steps.tariff-week.outputs.key }}
+      - name: Use tariff snapshot
+        run: |
+          if [ -f tariff-snapshot/tariff-line-items.json ]; then
+            cp tariff-snapshot/*.json wattsup/app/src/WattsUp.Wasm/wwwroot/data/
+          else
+            echo "::warning::No tariff snapshot fetched or cached; deploying the committed baseline tariffs."
+          fi
+          if [ "${{ steps.fetch-tariffs.outcome }}" = "failure" ]; then
+            echo "::warning::Tariff refetch failed (likely rate-limited); using the previous snapshot. Retries next run."
+          fi
       - run: dotnet publish wattsup/app/src/WattsUp.Wasm/WattsUp.Wasm.csproj -c Release -o publish-output
       # Belt-and-suspenders alongside the committed wwwroot/.nojekyll — GitHub Pages runs Jekyll by
       # default, which silently drops any "_"-prefixed folder, fatal for Blazor's _framework/.

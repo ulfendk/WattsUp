@@ -37,7 +37,7 @@ that sees who you are or what you enter. A few things follow from that:
   hours and publishes it as static files alongside the site, which your browser then reads —
   same-origin, no CORS problem. This involves no personal data whatsoever (it's the same public
   dataset the real add-on polls); it just means prices can lag up to ~6h behind the real API,
-  rather than being instant.
+  rather than being instant. Grid tariffs change rarely and are refreshed weekly.
 - Eloverblik's personal-data API may or may not allow being called directly from a browser (a CORS
   policy only eloverblik.dk controls); if it doesn't, metering-point/consumption features show a
   clear error instead of data.

@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.16 — 2026-11-26
+
+- **Public demo: prices refresh again.** The scheduled refresh of the demo's price snapshot had
+  failed since 10 Nov, rate-limited by api.energidataservice.dk while downloading the full grid
+  tariff list. Spot prices are now fetched on every run and grid tariffs only weekly (cached in
+  between, falling back to the previous copy if a refetch fails). No change to the add-on itself.
+
 ## 0.2.15 — 2026-11-10
 
 - **New: price clock image** (`image.wattsup_price_clock`). Today's prices as a 24-hour clock — one
